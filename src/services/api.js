@@ -67,6 +67,11 @@ export const vendorAPI = {
   addToInventory: (machineId, data) => api.post(`/vendor/machines/${machineId}/inventory`, data),
   updateInventory: (machineId, id, data) => api.put(`/vendor/machines/${machineId}/inventory/${id}`, data),
   removeFromInventory: (machineId, id) => api.delete(`/vendor/machines/${machineId}/inventory/${id}`),
+
+  // Discounts
+  getMachineDiscounts: (machineId) => api.get(`/vendor/machines/${machineId}/discounts`),
+  createDiscount: (machineId, data) => api.post(`/vendor/machines/${machineId}/discounts`, data),
+  deleteDiscount: (machineId, discountId) => api.delete(`/vendor/machines/${machineId}/discounts/${discountId}`),
 };
 
 // Customer API

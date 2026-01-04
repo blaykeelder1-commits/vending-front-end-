@@ -381,9 +381,16 @@ function MachineDetails() {
   const [machine, setMachine] = useState(null);
   const [inventory, setInventory] = useState([]);
   const [products, setProducts] = useState([]);
+  const [discounts, setDiscounts] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showDiscountForm, setShowDiscountForm] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState('');
   const [stockQuantity, setStockQuantity] = useState('');
+  const [discountCode, setDiscountCode] = useState('');
+  const [discountProductId, setDiscountProductId] = useState('');
+  const [percentOff, setPercentOff] = useState('');
+  const [startsAt, setStartsAt] = useState('');
+  const [endsAt, setEndsAt] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -394,14 +401,16 @@ function MachineDetails() {
   const loadMachineData = async () => {
     try {
       setLoading(true);
-      const [machineRes, inventoryRes, productsRes] = await Promise.all([
+      const [machineRes, inventoryRes, productsRes, discountsRes] = await Promise.all([
         vendorAPI.getMachine(id),
         vendorAPI.getMachineInventory(id),
-        vendorAPI.getProducts()
+        vendorAPI.getProducts(),
+        vendorAPI.getMachineDiscounts(id)
       ]);
       setMachine(machineRes.data.data.machine);
       setInventory(inventoryRes.data.data.inventory);
       setProducts(productsRes.data.data.products);
+      setDiscounts(discountsRes.data.data.discounts);
     } catch (err) {
       console.error('Error loading machine data:', err);
       setError('Failed to load machine data');
@@ -428,6 +437,47 @@ function MachineDetails() {
       const errorMsg = err.response?.data?.message || 'Failed to add product';
       setError(errorMsg);
       alert('Error: ' + errorMsg);
+    }
+  };
+
+  const handleCreateDiscount = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      const payload = {
+        code: discountCode,
+        percentOff: parseFloat(percentOff)
+      };
+      if (discountProductId) payload.productId = parseInt(discountProductId);
+      if (startsAt) payload.startsAt = startsAt;
+      if (endsAt) payload.endsAt = endsAt;
+
+      await vendorAPI.createDiscount(id, payload);
+      setDiscountCode('');
+      setDiscountProductId('');
+      setPercentOff('');
+      setStartsAt('');
+      setEndsAt('');
+      setShowDiscountForm(false);
+      loadMachineData();
+      alert('Discount code created successfully!');
+    } catch (err) {
+      console.error('Error creating discount:', err);
+      const errorMsg = err.response?.data?.message || 'Failed to create discount';
+      setError(errorMsg);
+      alert('Error: ' + errorMsg);
+    }
+  };
+
+  const handleDeleteDiscount = async (discountId) => {
+    if (!window.confirm('Are you sure you want to delete this discount code?')) return;
+    try {
+      await vendorAPI.deleteDiscount(id, discountId);
+      loadMachineData();
+      alert('Discount code deleted!');
+    } catch (err) {
+      console.error('Error deleting discount:', err);
+      alert('Error: ' + (err.response?.data?.message || 'Failed to delete discount'));
     }
   };
 
@@ -506,6 +556,114 @@ function MachineDetails() {
             </div>
           ))
         )}
+      </div>
+
+      {/* Discount Codes Section */}
+      <div style={{ marginTop: '40px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3>Discount Codes ({discounts.filter(d => d.is_active).length} active)</h3>
+          <button
+            onClick={() => setShowDiscountForm(!showDiscountForm)}
+            style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', cursor: 'pointer' }}
+          >
+            {showDiscountForm ? 'Cancel' : 'Create Discount Code'}
+          </button>
+        </div>
+
+        {showDiscountForm && (
+          <form onSubmit={handleCreateDiscount} style={{ backgroundColor: '#f8f9fa', padding: '20px', marginTop: '10px', borderRadius: '5px' }}>
+            <h4>Create Discount Code</h4>
+            <div style={{ marginBottom: '10px' }}>
+              <input
+                type="text"
+                placeholder="Discount Code (e.g., SAVE15)"
+                value={discountCode}
+                onChange={(e) => setDiscountCode(e.target.value)}
+                style={{ width: '100%', padding: '8px' }}
+                required
+              />
+            </div>
+            <div style={{ marginBottom: '10px' }}>
+              <select
+                value={discountProductId}
+                onChange={(e) => setDiscountProductId(e.target.value)}
+                style={{ width: '100%', padding: '8px' }}
+              >
+                <option value="">All products</option>
+                {products.map(product => (
+                  <option key={product.id} value={product.id}>
+                    {product.product_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ marginBottom: '10px' }}>
+              <input
+                type="number"
+                placeholder="Percent Off (0-100)"
+                value={percentOff}
+                onChange={(e) => setPercentOff(e.target.value)}
+                style={{ width: '100%', padding: '8px' }}
+                min="0"
+                max="100"
+                step="0.01"
+                required
+              />
+            </div>
+            <div style={{ marginBottom: '10px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>Starts At (optional):</label>
+              <input
+                type="datetime-local"
+                value={startsAt}
+                onChange={(e) => setStartsAt(e.target.value)}
+                style={{ width: '100%', padding: '8px' }}
+              />
+            </div>
+            <div style={{ marginBottom: '10px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>Ends At (optional):</label>
+              <input
+                type="datetime-local"
+                value={endsAt}
+                onChange={(e) => setEndsAt(e.target.value)}
+                style={{ width: '100%', padding: '8px' }}
+              />
+            </div>
+            {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
+            <button type="submit" style={{ padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer' }}>
+              Create Discount
+            </button>
+          </form>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px', marginTop: '20px' }}>
+          {discounts.length === 0 ? (
+            <p>No discount codes created yet.</p>
+          ) : (
+            discounts.map(discount => (
+              <div key={discount.id} style={{ border: '1px solid #ddd', padding: '15px', borderRadius: '5px', backgroundColor: discount.is_active ? '#fff' : '#f8f9fa' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                  <h4 style={{ margin: '0 0 10px 0' }}>{discount.code}</h4>
+                  <button
+                    onClick={() => handleDeleteDiscount(discount.id)}
+                    style={{ padding: '5px 10px', backgroundColor: '#dc3545', color: 'white', border: 'none', cursor: 'pointer', fontSize: '12px' }}
+                  >
+                    Delete
+                  </button>
+                </div>
+                <p><strong>Product:</strong> {discount.product_name || 'All products'}</p>
+                <p><strong>Discount:</strong> {discount.discount_value}% off</p>
+                {discount.valid_from && <p style={{ fontSize: '14px', color: '#666' }}><strong>Starts:</strong> {new Date(discount.valid_from).toLocaleString()}</p>}
+                {discount.valid_until && <p style={{ fontSize: '14px', color: '#666' }}><strong>Ends:</strong> {new Date(discount.valid_until).toLocaleString()}</p>}
+                {discount.max_uses && <p style={{ fontSize: '14px', color: '#666' }}><strong>Uses:</strong> {discount.current_uses}/{discount.max_uses}</p>}
+                <p style={{ fontSize: '14px', marginTop: '10px' }}>
+                  <span style={{ padding: '3px 8px', borderRadius: '3px', backgroundColor: discount.is_active ? '#28a745' : '#6c757d', color: 'white', fontSize: '12px' }}>
+                    {discount.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                </p>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
