@@ -265,13 +265,24 @@ function ProductForm({ onSuccess }) {
     e.preventDefault();
     setError('');
     try {
-      await vendorAPI.createProduct({ productName, price: parseFloat(price), category });
+      console.log('Creating product...', { productName, price, category });
+      const response = await vendorAPI.createProduct({ productName, price: parseFloat(price), category });
+      console.log('Product created:', response.data);
       setProductName('');
       setPrice('');
       setCategory('');
-      onSuccess();
+      alert('Product created successfully!');
+      console.log('Calling onSuccess callback for product...');
+      // Add a small delay to ensure database transaction completes
+      setTimeout(() => {
+        console.log('Triggering onSuccess after delay...');
+        onSuccess();
+      }, 500);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to create product');
+      console.error('Error creating product:', err);
+      const errorMsg = err.response?.data?.message || err.message || 'Failed to create product';
+      setError(errorMsg);
+      alert('Error: ' + errorMsg);
     }
   };
 
