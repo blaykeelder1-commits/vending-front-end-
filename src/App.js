@@ -101,14 +101,19 @@ function VendorDashboard() {
 
   const loadData = async () => {
     try {
+      console.log('Loading machines and products...');
       const [machinesRes, productsRes] = await Promise.all([
         vendorAPI.getMachines(),
         vendorAPI.getProducts()
       ]);
+      console.log('Machines response:', machinesRes.data);
+      console.log('Products response:', productsRes.data);
       setMachines(machinesRes.data.data.machines);
       setProducts(productsRes.data.data.products);
     } catch (err) {
       console.error('Error loading data:', err);
+      console.error('Full error:', err.response || err);
+      alert('Error loading data: ' + (err.response?.data?.message || err.message));
     }
   };
 
