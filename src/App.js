@@ -101,16 +101,29 @@ function VendorDashboard() {
 
   const loadData = async () => {
     try {
-      console.log('Loading machines and products...');
+      console.log('=== loadData() CALLED ===');
+      console.log('Current token:', localStorage.getItem('token')?.substring(0, 20) + '...');
       const [machinesRes, productsRes] = await Promise.all([
         vendorAPI.getMachines(),
         vendorAPI.getProducts()
       ]);
-      console.log('Machines response:', machinesRes.data);
-      console.log('Products response:', productsRes.data);
-      setMachines(machinesRes.data.data.machines);
-      setProducts(productsRes.data.data.products);
+      console.log('=== API RESPONSES ===');
+      console.log('Full machines response:', JSON.stringify(machinesRes.data, null, 2));
+      console.log('Full products response:', JSON.stringify(productsRes.data, null, 2));
+
+      const newMachines = machinesRes.data.data.machines;
+      const newProducts = productsRes.data.data.products;
+
+      console.log('Extracted machines array:', newMachines);
+      console.log('Machines count:', newMachines?.length || 0);
+      console.log('Extracted products array:', newProducts);
+      console.log('Products count:', newProducts?.length || 0);
+
+      setMachines(newMachines);
+      setProducts(newProducts);
+      console.log('=== STATE UPDATED ===');
     } catch (err) {
+      console.error('=== ERROR IN loadData() ===');
       console.error('Error loading data:', err);
       console.error('Full error:', err.response || err);
       alert('Error loading data: ' + (err.response?.data?.message || err.message));
@@ -197,7 +210,12 @@ function MachineForm({ onSuccess }) {
       setMachineName('');
       setLocation('');
       alert('Machine created successfully!');
-      onSuccess();
+      console.log('Calling onSuccess callback...');
+      // Add a small delay to ensure database transaction completes
+      setTimeout(() => {
+        console.log('Triggering onSuccess after delay...');
+        onSuccess();
+      }, 500);
     } catch (err) {
       console.error('Error creating machine:', err);
       const errorMsg = err.response?.data?.message || err.message || 'Failed to create machine';
