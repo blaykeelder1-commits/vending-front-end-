@@ -12,11 +12,31 @@ const api = axios.create({
 // Add token to requests if it exists
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
+  console.log('=== API INTERCEPTOR ===');
+  console.log('Request URL:', config.baseURL + config.url);
+  console.log('Token in localStorage:', token ? token.substring(0, 20) + '...' : 'NO TOKEN FOUND');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+    console.log('Authorization header set:', config.headers.Authorization.substring(0, 30) + '...');
+  } else {
+    console.warn('⚠️ NO TOKEN - Request will fail if auth is required');
   }
   return config;
 });
+
+// Add response interceptor for better error logging
+api.interceptors.response.use(
+  (response) => {
+    console.log('✅ API Response Success:', response.config.url, response.status);
+    return response;
+  },
+  (error) => {
+    console.error('❌ API Response Error:', error.config?.url);
+    console.error('Error status:', error.response?.status);
+    console.error('Error message:', error.response?.data?.message);
+    return Promise.reject(error);
+  }
+);
 
 // Auth API
 export const authAPI = {

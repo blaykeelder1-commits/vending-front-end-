@@ -23,14 +23,26 @@ function VendorLogin() {
         ? { email, password }
         : { email, password, fullName };
 
+      console.log('=== VENDOR LOGIN/REGISTER ===');
+      console.log('Attempting:', isLogin ? 'Login' : 'Register');
+
       const response = isLogin
         ? await authAPI.vendorLogin(data)
         : await authAPI.vendorRegister(data);
 
-      localStorage.setItem('token', response.data.data.token);
+      console.log('Auth response:', response.data);
+      const token = response.data.data.token;
+      console.log('Token received:', token ? token.substring(0, 20) + '...' : 'NO TOKEN');
+
+      localStorage.setItem('token', token);
       localStorage.setItem('userType', 'vendor');
+
+      console.log('Token saved to localStorage');
+      console.log('Verify localStorage token:', localStorage.getItem('token')?.substring(0, 20) + '...');
+
       navigate('/vendor/dashboard');
     } catch (err) {
+      console.error('Login error:', err);
       setError(err.response?.data?.message || 'Authentication failed');
     }
   };
@@ -98,6 +110,19 @@ function VendorDashboard() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    console.log('=== VENDOR DASHBOARD MOUNTED ===');
+    console.log('Token in localStorage:', localStorage.getItem('token')?.substring(0, 20) + '...');
+    console.log('UserType:', localStorage.getItem('userType'));
+
+    // Check if token exists before loading data
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.error('❌ NO TOKEN FOUND - Redirecting to login');
+      alert('No authentication token found. Please login again.');
+      navigate('/vendor/login');
+      return;
+    }
+
     loadData();
   }, []);
 
