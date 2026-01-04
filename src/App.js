@@ -93,6 +93,8 @@ function VendorDashboard() {
   const [products, setProducts] = useState([]);
   const [showMachineForm, setShowMachineForm] = useState(false);
   const [showProductForm, setShowProductForm] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [lastUpdateTime, setLastUpdateTime] = useState(new Date().toLocaleTimeString());
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -101,6 +103,7 @@ function VendorDashboard() {
 
   const loadData = async () => {
     try {
+      setLoading(true);
       console.log('=== loadData() CALLED ===');
       console.log('Current token:', localStorage.getItem('token')?.substring(0, 20) + '...');
       const [machinesRes, productsRes] = await Promise.all([
@@ -121,12 +124,15 @@ function VendorDashboard() {
 
       setMachines(newMachines);
       setProducts(newProducts);
+      setLastUpdateTime(new Date().toLocaleTimeString());
       console.log('=== STATE UPDATED ===');
     } catch (err) {
       console.error('=== ERROR IN loadData() ===');
       console.error('Error loading data:', err);
       console.error('Full error:', err.response || err);
       alert('Error loading data: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -139,10 +145,20 @@ function VendorDashboard() {
   return (
     <div style={{ padding: '20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h1>Vendor Dashboard</h1>
-        <button onClick={handleLogout} style={{ padding: '10px 20px', backgroundColor: '#dc3545', color: 'white', border: 'none', cursor: 'pointer' }}>
-          Logout
-        </button>
+        <div>
+          <h1>Vendor Dashboard</h1>
+          <p style={{ fontSize: '14px', color: '#666', margin: '5px 0 0 0' }}>
+            Last updated: {lastUpdateTime} {loading && <span style={{ color: '#007bff' }}>⟳ Refreshing...</span>}
+          </p>
+        </div>
+        <div>
+          <button onClick={loadData} style={{ padding: '10px 20px', marginRight: '10px', backgroundColor: '#17a2b8', color: 'white', border: 'none', cursor: 'pointer' }}>
+            🔄 Refresh
+          </button>
+          <button onClick={handleLogout} style={{ padding: '10px 20px', backgroundColor: '#dc3545', color: 'white', border: 'none', cursor: 'pointer' }}>
+            Logout
+          </button>
+        </div>
       </div>
 
       {/* Machines Section */}
