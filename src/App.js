@@ -186,12 +186,18 @@ function MachineForm({ onSuccess }) {
     e.preventDefault();
     setError('');
     try {
-      await vendorAPI.createMachine({ machineName, location });
+      console.log('Creating machine...', { machineName, location });
+      const response = await vendorAPI.createMachine({ machineName, location });
+      console.log('Machine created:', response.data);
       setMachineName('');
       setLocation('');
+      alert('Machine created successfully!');
       onSuccess();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to create machine');
+      console.error('Error creating machine:', err);
+      const errorMsg = err.response?.data?.message || err.message || 'Failed to create machine';
+      setError(errorMsg);
+      alert('Error: ' + errorMsg);
     }
   };
 
