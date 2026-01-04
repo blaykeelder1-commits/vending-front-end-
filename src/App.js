@@ -131,24 +131,32 @@ function VendorDashboard() {
       setLoading(true);
       console.log('=== loadData() CALLED ===');
       console.log('Current token:', localStorage.getItem('token')?.substring(0, 20) + '...');
-      const [machinesRes, productsRes] = await Promise.all([
+      const [machinesRes, productsRes] = await Promise.allSettled([
         vendorAPI.getMachines(),
         vendorAPI.getProducts()
       ]);
       console.log('=== API RESPONSES ===');
-      console.log('Full machines response:', JSON.stringify(machinesRes.data, null, 2));
-      console.log('Full products response:', JSON.stringify(productsRes.data, null, 2));
 
-      const newMachines = machinesRes.data.data.machines;
-      const newProducts = productsRes.data.data.products;
+      if (machinesRes.status === 'fulfilled') {
+        console.log('Full machines response:', JSON.stringify(machinesRes.value.data, null, 2));
+        const newMachines = machinesRes.value.data.data.machines;
+        console.log('Extracted machines array:', newMachines);
+        console.log('Machines count:', newMachines?.length || 0);
+        setMachines(newMachines);
+      } else {
+        console.error('Machines API failed:', machinesRes.reason);
+      }
 
-      console.log('Extracted machines array:', newMachines);
-      console.log('Machines count:', newMachines?.length || 0);
-      console.log('Extracted products array:', newProducts);
-      console.log('Products count:', newProducts?.length || 0);
+      if (productsRes.status === 'fulfilled') {
+        console.log('Full products response:', JSON.stringify(productsRes.value.data, null, 2));
+        const newProducts = productsRes.value.data.data.products;
+        console.log('Extracted products array:', newProducts);
+        console.log('Products count:', newProducts?.length || 0);
+        setProducts(newProducts);
+      } else {
+        console.error('Products API failed:', productsRes.reason);
+      }
 
-      setMachines(newMachines);
-      setProducts(newProducts);
       setLastUpdateTime(new Date().toLocaleTimeString());
       console.log('=== STATE UPDATED ===');
     } catch (err) {
