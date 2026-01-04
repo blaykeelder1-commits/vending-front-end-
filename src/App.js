@@ -401,16 +401,39 @@ function MachineDetails() {
   const loadMachineData = async () => {
     try {
       setLoading(true);
-      const [machineRes, inventoryRes, productsRes, discountsRes] = await Promise.all([
+      const [machineRes, inventoryRes, productsRes, discountsRes] = await Promise.allSettled([
         vendorAPI.getMachine(id),
         vendorAPI.getMachineInventory(id),
         vendorAPI.getProducts(),
         vendorAPI.getMachineDiscounts(id)
       ]);
-      setMachine(machineRes.data.data.machine);
-      setInventory(inventoryRes.data.data.inventory);
-      setProducts(productsRes.data.data.products);
-      setDiscounts(discountsRes.data.data.discounts);
+
+      if (machineRes.status === 'fulfilled') {
+        setMachine(machineRes.value.data.data.machine);
+      } else {
+        console.error('Machine API failed:', machineRes.reason);
+        setError('Failed to load machine data');
+      }
+
+      if (inventoryRes.status === 'fulfilled') {
+        setInventory(inventoryRes.value.data.data.inventory);
+      } else {
+        console.error('Inventory API failed:', inventoryRes.reason);
+        setError('Failed to load inventory');
+      }
+
+      if (productsRes.status === 'fulfilled') {
+        setProducts(productsRes.value.data.data.products);
+      } else {
+        console.error('Products API failed:', productsRes.reason);
+        setError('Failed to load products');
+      }
+
+      if (discountsRes.status === 'fulfilled') {
+        setDiscounts(discountsRes.value.data.data.discounts);
+      } else {
+        console.error('Discounts API failed:', discountsRes.reason);
+      }
     } catch (err) {
       console.error('Error loading machine data:', err);
       setError('Failed to load machine data');
