@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { authAPI, vendorAPI, customerAPI } from './services/api';
 import './App.css';
 
@@ -377,10 +377,138 @@ function ProductForm({ onSuccess }) {
 }
 
 function MachineDetails() {
-  return <div style={{ padding: '20px' }}>
-    <h2>Machine Details</h2>
-    <Link to="/vendor/dashboard">Back to Dashboard</Link>
-  </div>;
+  const { id } = useParams();
+  const [machine, setMachine] = useState(null);
+  const [inventory, setInventory] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [stockQuantity, setStockQuantity] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    loadMachineData();
+  }, [id]);
+
+  const loadMachineData = async () => {
+    try {
+      setLoading(true);
+      const [machineRes, inventoryRes, productsRes] = await Promise.all([
+        vendorAPI.getMachine(id),
+        vendorAPI.getMachineInventory(id),
+        vendorAPI.getProducts()
+      ]);
+      setMachine(machineRes.data.data.machine);
+      setInventory(inventoryRes.data.data.inventory);
+      setProducts(productsRes.data.data.products);
+    } catch (err) {
+      console.error('Error loading machine data:', err);
+      setError('Failed to load machine data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddProduct = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      await vendorAPI.addToInventory(id, {
+        productId: parseInt(selectedProductId),
+        stockQuantity: parseInt(stockQuantity)
+      });
+      setSelectedProductId('');
+      setStockQuantity('');
+      setShowAddForm(false);
+      loadMachineData();
+      alert('Product added to machine inventory!');
+    } catch (err) {
+      console.error('Error adding product:', err);
+      const errorMsg = err.response?.data?.message || 'Failed to add product';
+      setError(errorMsg);
+      alert('Error: ' + errorMsg);
+    }
+  };
+
+  if (loading) return <div style={{ padding: '20px' }}>Loading...</div>;
+
+  return (
+    <div style={{ padding: '20px' }}>
+      <Link to="/vendor/dashboard" style={{ color: '#007bff', marginBottom: '20px', display: 'inline-block' }}>← Back to Dashboard</Link>
+
+      {machine && (
+        <div style={{ marginBottom: '30px' }}>
+          <h2>{machine.machine_name}</h2>
+          <p><strong>Location:</strong> {machine.location}</p>
+          <p><strong>Status:</strong> {machine.is_active ? '✅ Active' : '❌ Inactive'}</p>
+        </div>
+      )}
+
+      <div style={{ marginBottom: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3>Inventory ({inventory.length} products)</h3>
+          <button
+            onClick={() => setShowAddForm(!showAddForm)}
+            style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', cursor: 'pointer' }}
+          >
+            {showAddForm ? 'Cancel' : 'Assign Product'}
+          </button>
+        </div>
+
+        {showAddForm && (
+          <form onSubmit={handleAddProduct} style={{ backgroundColor: '#f8f9fa', padding: '20px', marginTop: '10px', borderRadius: '5px' }}>
+            <h4>Assign Product to Machine</h4>
+            <div style={{ marginBottom: '10px' }}>
+              <select
+                value={selectedProductId}
+                onChange={(e) => setSelectedProductId(e.target.value)}
+                style={{ width: '100%', padding: '8px' }}
+                required
+              >
+                <option value="">Select a product...</option>
+                {products.map(product => (
+                  <option key={product.id} value={product.id}>
+                    {product.product_name} - ${product.price}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ marginBottom: '10px' }}>
+              <input
+                type="number"
+                placeholder="Stock Quantity"
+                value={stockQuantity}
+                onChange={(e) => setStockQuantity(e.target.value)}
+                style={{ width: '100%', padding: '8px' }}
+                min="0"
+                required
+              />
+            </div>
+            {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
+            <button type="submit" style={{ padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer' }}>
+              Add to Inventory
+            </button>
+          </form>
+        )}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '20px' }}>
+        {inventory.length === 0 ? (
+          <p>No products assigned to this machine yet.</p>
+        ) : (
+          inventory.map(item => (
+            <div key={item.id} style={{ border: '1px solid #ddd', padding: '15px', borderRadius: '5px' }}>
+              <h4>{item.product_name}</h4>
+              <p><strong>Price:</strong> ${item.price}</p>
+              <p><strong>Stock:</strong> {item.current_stock}</p>
+              {item.description && <p style={{ fontSize: '14px', color: '#666' }}>{item.description}</p>}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ============================================
