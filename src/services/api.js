@@ -96,8 +96,11 @@ export const customerAPI = {
   submitPoints: (data) => api.post('/customer/loyalty/submit', data),
 
   // Discounts
-  getMachineDiscounts: () => api.get('/customer/machine/discounts'),
+  getMachineDiscounts: (machineId) => api.get(`/customer/machine/discounts${machineId ? `?machineId=${machineId}` : ''}`),
   redeemDiscount: (data) => api.post('/customer/discounts/redeem', data),
+  submitRedemption: (formData) => api.post('/customer/redemptions/submit', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
 
   // Profile
   getProfile: () => api.get('/customer/profile'),

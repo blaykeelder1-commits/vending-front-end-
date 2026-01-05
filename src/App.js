@@ -1156,7 +1156,7 @@ function CustomerPolls() {
   return (
     <div style={{ padding: '20px' }}>
       <h1>Product Polls</h1>
-      <Link to="/customer/products" style={{ color: '#007bff' }}>Back to Products</Link>
+      <Link to="/customer/portal" style={{ color: '#007bff' }}>Back to Portal</Link>
 
       <div style={{ marginTop: '20px' }}>
         {polls.length === 0 ? (
@@ -1203,8 +1203,14 @@ function DiscountHub() {
   const [discountCode, setDiscountCode] = useState('');
   const [showScanner, setShowScanner] = useState(false);
   const [selectedMachineId, setSelectedMachineId] = useState(null);
+  const [activeDiscounts, setActiveDiscounts] = useState([]);
+  const [selectedDiscount, setSelectedDiscount] = useState(null);
+  const [proofImage, setProofImage] = useState(null);
+  const [showRedemptionModal, setShowRedemptionModal] = useState(false);
   const [loyalty, setLoyalty] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadingDiscounts, setLoadingDiscounts] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
@@ -1217,9 +1223,17 @@ function DiscountHub() {
     loadLoyalty();
     const savedMachineId = localStorage.getItem('selectedMachineId');
     if (savedMachineId) {
-      setSelectedMachineId(parseInt(savedMachineId));
+      const machineId = parseInt(savedMachineId);
+      setSelectedMachineId(machineId);
+      loadActiveDiscounts(machineId);
     }
   }, [navigate]);
+
+  useEffect(() => {
+    if (selectedMachineId) {
+      loadActiveDiscounts(selectedMachineId);
+    }
+  }, [selectedMachineId]);
 
   const loadLoyalty = async () => {
     try {
@@ -1257,6 +1271,67 @@ function DiscountHub() {
     setSelectedMachineId(machineId);
     localStorage.setItem('selectedMachineId', machineId.toString());
     setShowScanner(false);
+    loadActiveDiscounts(machineId);
+  };
+
+  const loadActiveDiscounts = async (machineId) => {
+    if (!machineId) return;
+    try {
+      setLoadingDiscounts(true);
+      const response = await customerAPI.getMachineDiscounts(machineId);
+      setActiveDiscounts(response.data.data.discounts || []);
+    } catch (err) {
+      console.error('Error loading discounts:', err);
+      setActiveDiscounts([]);
+    } finally {
+      setLoadingDiscounts(false);
+    }
+  };
+
+  const handleStartRedemption = (discount) => {
+    setSelectedDiscount(discount);
+    setProofImage(null);
+    setError('');
+    setShowRedemptionModal(true);
+  };
+
+  const handleSubmitRedemption = async () => {
+    if (!proofImage) {
+      setError('Please select a proof of purchase image');
+      return;
+    }
+
+    if (!selectedDiscount || !selectedMachineId) {
+      setError('Missing required information');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setError('');
+
+      const formData = new FormData();
+      formData.append('machineId', selectedMachineId);
+      formData.append('discountId', selectedDiscount.id);
+      formData.append('proofImage', proofImage);
+
+      const response = await customerAPI.submitRedemption(formData);
+
+      alert(response.data.message || 'Redemption successful!');
+      setShowRedemptionModal(false);
+      setSelectedDiscount(null);
+      setProofImage(null);
+
+      // Reload data
+      loadLoyalty();
+      loadActiveDiscounts(selectedMachineId);
+    } catch (err) {
+      console.error('Error submitting redemption:', err);
+      const errorMsg = err.response?.data?.message || 'Failed to submit redemption';
+      setError(errorMsg);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleRedeemReward = async (rewardName) => {
@@ -1328,26 +1403,135 @@ function DiscountHub() {
         </div>
       )}
 
-      <div style={{ backgroundColor: '#fff', padding: '20px', border: '1px solid #ddd', borderRadius: '5px', marginBottom: '20px' }}>
-        <h3 style={{ marginTop: 0 }}>Redeem Discount Code</h3>
-        <form onSubmit={handleRedeemDiscount}>
-          <input
-            type="text"
-            placeholder="Enter discount code"
-            value={discountCode}
-            onChange={(e) => setDiscountCode(e.target.value)}
-            style={{ width: '100%', padding: '10px', marginBottom: '10px', borderRadius: '5px', border: '1px solid #ddd' }}
-            required
-          />
-          {error && <div style={{ color: 'red', marginBottom: '10px', fontSize: '14px' }}>{error}</div>}
-          <button
-            type="submit"
-            style={{ width: '100%', padding: '12px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}
-          >
-            Redeem Discount
-          </button>
-        </form>
-      </div>
+      {selectedMachineId && (
+        <div style={{ backgroundColor: '#fff', padding: '20px', border: '1px solid #ddd', borderRadius: '5px', marginBottom: '20px' }}>
+          <h3 style={{ marginTop: 0 }}>Active Discounts</h3>
+          {loadingDiscounts ? (
+            <p>Loading discounts...</p>
+          ) : activeDiscounts.length === 0 ? (
+            <p style={{ color: '#666' }}>No active discounts available for this machine.</p>
+          ) : (
+            <div>
+              {activeDiscounts.map((discount) => (
+                <div
+                  key={discount.id}
+                  style={{
+                    padding: '15px',
+                    marginBottom: '10px',
+                    backgroundColor: '#f8f9fa',
+                    borderRadius: '5px',
+                    border: '1px solid #dee2e6'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ flex: 1 }}>
+                      <h4 style={{ margin: '0 0 5px 0', color: '#007bff' }}>{discount.code}</h4>
+                      {discount.product_name && <p style={{ margin: '5px 0', fontSize: '14px' }}><strong>Product:</strong> {discount.product_name}</p>}
+                      <p style={{ margin: '5px 0', fontSize: '14px' }}>
+                        <strong>Discount:</strong> {discount.discount_value}% off
+                      </p>
+                      {discount.valid_until && (
+                        <p style={{ margin: '5px 0', fontSize: '12px', color: '#666' }}>
+                          Expires: {new Date(discount.valid_until).toLocaleDateString()}
+                        </p>
+                      )}
+                      {discount.max_uses && (
+                        <p style={{ margin: '5px 0', fontSize: '12px', color: '#666' }}>
+                          {discount.max_uses - discount.current_uses} uses remaining
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleStartRedemption(discount)}
+                      style={{
+                        padding: '10px 20px',
+                        backgroundColor: '#28a745',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '5px',
+                        cursor: 'pointer',
+                        fontWeight: 'bold',
+                        marginLeft: '15px'
+                      }}
+                    >
+                      Redeem
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {showRedemptionModal && selectedDiscount && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '10px', maxWidth: '500px', width: '90%' }}>
+            <h3 style={{ marginTop: 0 }}>Redeem: {selectedDiscount.code}</h3>
+            <p>Upload proof of purchase to redeem this discount and earn 10 loyalty points.</p>
+
+            <div style={{ marginBottom: '15px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Proof of Purchase Image:</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  setProofImage(e.target.files[0]);
+                  setError('');
+                }}
+                style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '5px' }}
+              />
+              {proofImage && (
+                <p style={{ marginTop: '5px', fontSize: '14px', color: '#28a745' }}>
+                  Selected: {proofImage.name}
+                </p>
+              )}
+            </div>
+
+            {error && <div style={{ color: 'red', marginBottom: '10px', fontSize: '14px' }}>{error}</div>}
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+              <button
+                onClick={handleSubmitRedemption}
+                disabled={submitting || !proofImage}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  backgroundColor: submitting || !proofImage ? '#6c757d' : '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '5px',
+                  cursor: submitting || !proofImage ? 'not-allowed' : 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                {submitting ? 'Submitting...' : 'Submit Redemption'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowRedemptionModal(false);
+                  setSelectedDiscount(null);
+                  setProofImage(null);
+                  setError('');
+                }}
+                disabled={submitting}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  backgroundColor: '#dc3545',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '5px',
+                  cursor: submitting ? 'not-allowed' : 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ backgroundColor: '#fff', padding: '20px', border: '1px solid #ddd', borderRadius: '5px', marginBottom: '20px' }}>
         <h3 style={{ marginTop: 0 }}>Points Progress</h3>
@@ -1452,7 +1636,6 @@ function CustomerLoyalty() {
   return (
     <div style={{ padding: '20px' }}>
       <h1>Customer Portal</h1>
-      <Link to="/customer/products" style={{ color: '#007bff' }}>Back to Products</Link>
 
       <div style={{ marginTop: '20px' }}>
         {loyalty?.loyaltyAccounts?.length === 0 ? (
@@ -1531,7 +1714,6 @@ function App() {
         <Route path="/customer/login" element={<CustomerLogin />} />
         <Route path="/customer/scan" element={<CustomerQRScan />} />
         <Route path="/customer/machine/:machineId" element={<CustomerMachine />} />
-        <Route path="/customer/products" element={<CustomerProducts />} />
         <Route path="/customer/polls" element={<CustomerPolls />} />
         <Route path="/customer/loyalty" element={<CustomerLoyalty />} />
         <Route path="/customer/portal" element={<CustomerLoyalty />} />
