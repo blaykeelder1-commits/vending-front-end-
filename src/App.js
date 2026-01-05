@@ -700,6 +700,7 @@ function CustomerQRLogin() {
   const [qrData, setQrData] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const location = window.location;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -708,7 +709,11 @@ function CustomerQRLogin() {
       const response = await authAPI.customerQRLogin({ qrData });
       localStorage.setItem('token', response.data.data.sessionToken);
       localStorage.setItem('userType', 'customer');
-      navigate('/customer/products');
+
+      // Check for returnTo query parameter
+      const params = new URLSearchParams(location.search);
+      const returnTo = params.get('returnTo') || '/customer/products';
+      navigate(returnTo);
     } catch (err) {
       setError(err.response?.data?.message || 'QR login failed');
     }
@@ -738,6 +743,40 @@ function CustomerQRLogin() {
       </p>
     </div>
   );
+}
+
+function CustomerMachine() {
+  const { machineId } = useParams();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const initMachine = async () => {
+      // Check if logged in
+      const token = localStorage.getItem('token');
+      if (!token) {
+        // Redirect to login with returnTo
+        navigate(`/customer/login?returnTo=/customer/machine/${machineId}`);
+        return;
+      }
+
+      // Set machine session
+      try {
+        await customerAPI.setMachine({ machineId: parseInt(machineId) });
+        setLoading(false);
+      } catch (err) {
+        console.error('Error setting machine:', err);
+        alert('Error: ' + (err.response?.data?.message || 'Failed to set machine'));
+        navigate('/customer/login');
+      }
+    };
+
+    initMachine();
+  }, [machineId, navigate]);
+
+  if (loading) return <div style={{ padding: '20px' }}>Loading...</div>;
+
+  return <CustomerProducts />;
 }
 
 function CustomerProducts() {
@@ -1120,6 +1159,7 @@ function App() {
 
         {/* Customer Routes */}
         <Route path="/customer/login" element={<CustomerQRLogin />} />
+        <Route path="/customer/machine/:machineId" element={<CustomerMachine />} />
         <Route path="/customer/products" element={<CustomerProducts />} />
         <Route path="/customer/polls" element={<CustomerPolls />} />
         <Route path="/customer/loyalty" element={<CustomerLoyalty />} />

@@ -77,6 +77,7 @@ export const vendorAPI = {
 // Customer API
 export const customerAPI = {
   // Machine & Products
+  setMachine: (data) => api.post('/customer/set-machine', data),
   getMachine: () => api.get('/customer/machine'),
 
   // Polls
