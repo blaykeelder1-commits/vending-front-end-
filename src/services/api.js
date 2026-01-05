@@ -53,6 +53,7 @@ export const vendorAPI = {
   // Machines
   getMachines: () => api.get('/vendor/machines'),
   getMachine: (id) => api.get(`/vendor/machines/${id}`),
+  getMachineQR: (id) => api.get(`/vendor/machines/${id}/qr`),
   createMachine: (data) => api.post('/vendor/machines', data),
   updateMachine: (id, data) => api.put(`/vendor/machines/${id}`, data),
   deleteMachine: (id) => api.delete(`/vendor/machines/${id}`),
@@ -109,6 +110,11 @@ export const customerAPI = {
 
   // Profile
   getProfile: () => api.get('/customer/profile'),
+};
+
+// Public API (no auth)
+export const publicAPI = {
+  resolveMachineQR: (qr_token) => api.get(`/auth/public/machines/by-qr/${qr_token}`),
 };
 
 export default api;

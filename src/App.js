@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate, useNavigate, useParams } from 'react-router-dom';
-import { authAPI, vendorAPI, customerAPI } from './services/api';
+import { authAPI, vendorAPI, customerAPI, publicAPI } from './services/api';
 import QRCode from 'qrcode';
 import './App.css';
 
@@ -178,14 +178,14 @@ function VendorDashboard() {
 
   const handleDownloadQR = async (machineId) => {
     try {
-      const baseUrl = process.env.REACT_APP_FRONTEND_URL || window.location.origin;
-      const qrUrl = `${baseUrl}/customer/machine/${machineId}`;
+      const response = await vendorAPI.getMachineQR(machineId);
+      const qrUrl = response.data.data.qr_url;
 
       const qrDataUrl = await QRCode.toDataURL(qrUrl, { width: 512 });
 
       const link = document.createElement('a');
       link.href = qrDataUrl;
-      link.download = `machine-${machineId}-qr.png`;
+      link.download = `machine-qr-${machineId}.png`;
       link.click();
     } catch (err) {
       console.error('Error generating QR:', err);
@@ -554,7 +554,7 @@ function MachineDetails() {
       await vendorAPI.createPoll(id, {
         question: pollQuestion,
         options: validOptions.map(opt => ({
-          optionText: opt.optionText,
+          text: opt.optionText,
           imageUrl: opt.imageUrl || null
         }))
       });
@@ -1134,7 +1134,7 @@ function CustomerQRScan() {
 }
 
 function CustomerMachine() {
-  const { machineId } = useParams();
+  const { qr_token } = useParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
 
@@ -1144,13 +1144,18 @@ function CustomerMachine() {
       const token = localStorage.getItem('token');
       if (!token) {
         // Redirect to login with returnTo
-        navigate(`/customer/login?returnTo=/customer/machine/${machineId}`);
+        navigate(`/customer/login?returnTo=/customer/machine/${qr_token}`);
         return;
       }
 
-      // Set machine session
+      // Resolve QR token to machine ID and set session
       try {
-        await customerAPI.setMachine({ machineId: parseInt(machineId) });
+        const resolveResponse = await publicAPI.resolveMachineQR(qr_token);
+        const machineId = resolveResponse.data.data.machineId;
+
+        localStorage.setItem('selectedMachineId', machineId.toString());
+        await customerAPI.setMachine({ machineId });
+
         setLoading(false);
       } catch (err) {
         console.error('Error setting machine:', err);
@@ -1160,7 +1165,7 @@ function CustomerMachine() {
     };
 
     initMachine();
-  }, [machineId, navigate]);
+  }, [qr_token, navigate]);
 
   if (loading) return <div style={{ padding: '20px' }}>Loading...</div>;
 
@@ -2059,7 +2064,7 @@ function App() {
         {/* Customer Routes */}
         <Route path="/customer/login" element={<CustomerLogin />} />
         <Route path="/customer/scan" element={<CustomerQRScan />} />
-        <Route path="/customer/machine/:machineId" element={<CustomerMachine />} />
+        <Route path="/customer/machine/:qr_token" element={<CustomerMachine />} />
         <Route path="/customer/polls" element={<CustomerPolls />} />
         <Route path="/customer/loyalty" element={<CustomerLoyalty />} />
         <Route path="/customer/portal" element={<CustomerLoyalty />} />
