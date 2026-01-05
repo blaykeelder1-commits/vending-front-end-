@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { authAPI, vendorAPI, customerAPI, publicAPI } from './services/api';
 import QRCode from 'qrcode';
+import { jsPDF } from 'jspdf';
 import './App.css';
+
+const FRONTEND_URL = process.env.REACT_APP_FRONTEND_URL || window.location.origin;
 
 // ============================================
 // VENDOR COMPONENTS
@@ -409,6 +412,7 @@ function MachineDetails() {
   const [products, setProducts] = useState([]);
   const [discounts, setDiscounts] = useState([]);
   const [polls, setPolls] = useState([]);
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [showDiscountForm, setShowDiscountForm] = useState(false);
   const [showPollForm, setShowPollForm] = useState(false);
@@ -440,7 +444,15 @@ function MachineDetails() {
       ]);
 
       if (machineRes.status === 'fulfilled') {
-        setMachine(machineRes.value.data.data.machine);
+        const machineData = machineRes.value.data.data.machine;
+        setMachine(machineData);
+
+        // Generate QR code
+        if (machineData.qr_token) {
+          const qrUrl = `${FRONTEND_URL}/customer/machine/${machineData.qr_token}`;
+          const qrImage = await QRCode.toDataURL(qrUrl, { width: 300 });
+          setQrCodeDataUrl(qrImage);
+        }
       } else {
         console.error('Machine API failed:', machineRes.reason);
         setError('Failed to load machine data');
@@ -585,6 +597,47 @@ function MachineDetails() {
     const updated = [...pollOptions];
     updated[index][field] = value;
     setPollOptions(updated);
+  };
+
+  const handleCopyLink = () => {
+    if (!machine?.qr_token) return;
+    const qrUrl = `${FRONTEND_URL}/customer/machine/${machine.qr_token}`;
+    navigator.clipboard.writeText(qrUrl).then(() => {
+      alert('Link copied to clipboard!');
+    }).catch(err => {
+      console.error('Failed to copy:', err);
+      alert('Failed to copy link');
+    });
+  };
+
+  const handleDownloadQRPDF = () => {
+    if (!machine?.qr_token || !qrCodeDataUrl) return;
+
+    try {
+      const pdf = new jsPDF();
+      const pageWidth = pdf.internal.pageSize.getWidth();
+
+      pdf.setFontSize(18);
+      pdf.text(machine.machine_name || 'Machine QR Code', pageWidth / 2, 20, { align: 'center' });
+
+      pdf.setFontSize(12);
+      pdf.text('Scan this QR code to access discounts and polls', pageWidth / 2, 35, { align: 'center' });
+
+      pdf.addImage(qrCodeDataUrl, 'PNG', (pageWidth - 80) / 2, 50, 80, 80);
+
+      pdf.setFontSize(10);
+      pdf.setTextColor(100);
+      pdf.text(`Machine ID: ${id}`, pageWidth / 2, 145, { align: 'center' });
+
+      const qrUrl = `${FRONTEND_URL}/customer/machine/${machine.qr_token}`;
+      pdf.setFontSize(8);
+      pdf.text(qrUrl, pageWidth / 2, 155, { align: 'center' });
+
+      pdf.save(`machine-${id}-qr.pdf`);
+    } catch (err) {
+      console.error('Error generating QR PDF:', err);
+      alert('Failed to generate QR PDF');
+    }
   };
 
   if (loading) return <div style={{ padding: '20px' }}>Loading...</div>;
@@ -877,6 +930,39 @@ function MachineDetails() {
             ))
           )}
         </div>
+      </div>
+
+      {/* Machine QR Code Section */}
+      <div style={{ marginTop: '40px' }}>
+        <h3>Machine QR Code</h3>
+        {qrCodeDataUrl ? (
+          <div style={{ backgroundColor: '#f8f9fa', padding: '20px', borderRadius: '5px', border: '1px solid #ddd' }}>
+            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+              <img src={qrCodeDataUrl} alt="Machine QR Code" style={{ maxWidth: '250px', border: '1px solid #ddd', borderRadius: '5px' }} />
+            </div>
+            <p style={{ marginBottom: '15px', color: '#666', textAlign: 'center', fontSize: '14px' }}>
+              Customers scan this QR code to access this machine's discounts and polls
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                onClick={handleCopyLink}
+                style={{ padding: '10px 20px', backgroundColor: '#6c757d', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}
+              >
+                Copy Link
+              </button>
+              <button
+                onClick={handleDownloadQRPDF}
+                style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}
+              >
+                Download PDF
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ backgroundColor: '#fff3cd', padding: '20px', borderRadius: '5px', border: '1px solid #ffc107' }}>
+            <p style={{ margin: 0, color: '#856404' }}>Loading QR code...</p>
+          </div>
+        )}
       </div>
     </div>
   );
