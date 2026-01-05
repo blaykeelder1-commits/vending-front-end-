@@ -742,7 +742,12 @@ function CustomerQRLogin() {
 
 function CustomerProducts() {
   const [machineData, setMachineData] = useState(null);
+  const [discounts, setDiscounts] = useState([]);
+  const [currentBalance, setCurrentBalance] = useState(0);
+  const [showPointsForm, setShowPointsForm] = useState(false);
+  const [pointsToAdd, setPointsToAdd] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -751,8 +756,33 @@ function CustomerProducts() {
 
   const loadMachine = async () => {
     try {
-      const response = await customerAPI.getMachine();
-      setMachineData(response.data.data);
+      setLoading(true);
+      const [machineRes, discountsRes] = await Promise.allSettled([
+        customerAPI.getMachine(),
+        customerAPI.getMachineDiscounts()
+      ]);
+
+      if (machineRes.status === 'fulfilled') {
+        setMachineData(machineRes.value.data.data);
+      } else {
+        console.error('Machine API failed:', machineRes.reason);
+      }
+
+      if (discountsRes.status === 'fulfilled') {
+        setDiscounts(discountsRes.value.data.data.discounts);
+      } else {
+        console.error('Discounts API failed:', discountsRes.reason);
+      }
+
+      // Try to load current balance (may fail if not registered)
+      try {
+        const loyaltyRes = await customerAPI.getLoyalty();
+        const accounts = loyaltyRes.data.data.loyaltyAccounts || [];
+        const machineAccount = accounts.find(acc => acc.machine_id === machineData?.machine?.id);
+        setCurrentBalance(machineAccount?.points_balance || 0);
+      } catch (err) {
+        console.log('Loyalty not available (customer may not be registered)');
+      }
     } catch (err) {
       console.error('Error loading machine:', err);
     } finally {
@@ -764,6 +794,23 @@ function CustomerProducts() {
     localStorage.removeItem('token');
     localStorage.removeItem('userType');
     navigate('/customer/login');
+  };
+
+  const handleSubmitPoints = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      await customerAPI.submitPoints({ pointsEarned: parseInt(pointsToAdd) });
+      setPointsToAdd('');
+      setShowPointsForm(false);
+      loadMachine();
+      alert('Points submitted successfully!');
+    } catch (err) {
+      console.error('Error submitting points:', err);
+      const errorMsg = err.response?.data?.message || 'Failed to submit points';
+      setError(errorMsg);
+      alert('Error: ' + errorMsg);
+    }
   };
 
   if (loading) return <div style={{ padding: '20px' }}>Loading...</div>;
@@ -791,11 +838,71 @@ function CustomerProducts() {
           <div key={product.id} style={{ border: '1px solid #ddd', padding: '15px', borderRadius: '5px' }}>
             <h3>{product.product_name}</h3>
             <p><strong>Price:</strong> ${product.price}</p>
-            <p><strong>Slot:</strong> {product.slot_number}</p>
-            <p><strong>Stock:</strong> {product.stock_quantity}</p>
-            {product.category && <p><strong>Category:</strong> {product.category}</p>}
+            <p><strong>Stock:</strong> {product.current_stock}</p>
+            {product.description && <p style={{ fontSize: '14px', color: '#666' }}>{product.description}</p>}
           </div>
         ))}
+      </div>
+
+      {/* Loyalty Points Section */}
+      <div style={{ marginTop: '40px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2>Loyalty Points</h2>
+          <button
+            onClick={() => setShowPointsForm(!showPointsForm)}
+            style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', cursor: 'pointer' }}
+          >
+            {showPointsForm ? 'Cancel' : 'Submit Points'}
+          </button>
+        </div>
+
+        <div style={{ backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '5px', marginTop: '10px' }}>
+          <p style={{ fontSize: '18px', margin: 0 }}><strong>Current Balance:</strong> {currentBalance} points</p>
+        </div>
+
+        {showPointsForm && (
+          <form onSubmit={handleSubmitPoints} style={{ backgroundColor: '#fff', padding: '20px', marginTop: '10px', border: '1px solid #ddd', borderRadius: '5px' }}>
+            <h4>Submit Points</h4>
+            <div style={{ marginBottom: '10px' }}>
+              <input
+                type="number"
+                placeholder="Points to add"
+                value={pointsToAdd}
+                onChange={(e) => setPointsToAdd(e.target.value)}
+                style={{ width: '100%', padding: '8px' }}
+                min="1"
+                required
+              />
+            </div>
+            {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
+            <button type="submit" style={{ padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer' }}>
+              Submit
+            </button>
+          </form>
+        )}
+      </div>
+
+      {/* Active Discounts Section */}
+      <div style={{ marginTop: '40px' }}>
+        <h2>Active Discounts</h2>
+        {discounts.length === 0 ? (
+          <p>No active discounts at this time.</p>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '20px', marginTop: '20px' }}>
+            {discounts.map(discount => (
+              <div key={discount.id} style={{ border: '1px solid #28a745', padding: '15px', borderRadius: '5px', backgroundColor: '#f0fff4' }}>
+                <h3 style={{ margin: '0 0 10px 0', color: '#28a745' }}>{discount.code}</h3>
+                <p><strong>Discount:</strong> {discount.discount_value}% off</p>
+                <p><strong>Product:</strong> {discount.product_name || 'All products'}</p>
+                {discount.valid_until && (
+                  <p style={{ fontSize: '14px', color: '#666' }}>
+                    <strong>Valid until:</strong> {new Date(discount.valid_until).toLocaleDateString()}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

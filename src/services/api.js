@@ -90,6 +90,10 @@ export const customerAPI = {
   // Loyalty
   getLoyalty: () => api.get('/customer/loyalty'),
   getMachineLoyalty: (machineId) => api.get(`/customer/loyalty/${machineId}`),
+  submitPoints: (data) => api.post('/customer/loyalty/submit', data),
+
+  // Discounts
+  getMachineDiscounts: () => api.get('/customer/machine/discounts'),
 
   // Profile
   getProfile: () => api.get('/customer/profile'),
