@@ -746,6 +746,8 @@ function CustomerProducts() {
   const [currentBalance, setCurrentBalance] = useState(0);
   const [showPointsForm, setShowPointsForm] = useState(false);
   const [pointsToAdd, setPointsToAdd] = useState('');
+  const [showRedeemForm, setShowRedeemForm] = useState(false);
+  const [redeemCode, setRedeemCode] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -808,6 +810,23 @@ function CustomerProducts() {
     } catch (err) {
       console.error('Error submitting points:', err);
       const errorMsg = err.response?.data?.message || 'Failed to submit points';
+      setError(errorMsg);
+      alert('Error: ' + errorMsg);
+    }
+  };
+
+  const handleRedeemDiscount = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      const response = await customerAPI.redeemDiscount({ code: redeemCode });
+      setRedeemCode('');
+      setShowRedeemForm(false);
+      loadMachine();
+      alert(response.data.message);
+    } catch (err) {
+      console.error('Error redeeming discount:', err);
+      const errorMsg = err.response?.data?.message || 'Failed to redeem discount';
       setError(errorMsg);
       alert('Error: ' + errorMsg);
     }
@@ -877,6 +896,39 @@ function CustomerProducts() {
             {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
             <button type="submit" style={{ padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer' }}>
               Submit
+            </button>
+          </form>
+        )}
+      </div>
+
+      {/* Redeem Discount Section */}
+      <div style={{ marginTop: '40px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2>Redeem Discount Code</h2>
+          <button
+            onClick={() => setShowRedeemForm(!showRedeemForm)}
+            style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', cursor: 'pointer' }}
+          >
+            {showRedeemForm ? 'Cancel' : 'Redeem Code'}
+          </button>
+        </div>
+
+        {showRedeemForm && (
+          <form onSubmit={handleRedeemDiscount} style={{ backgroundColor: '#fff', padding: '20px', marginTop: '10px', border: '1px solid #ddd', borderRadius: '5px' }}>
+            <h4>Enter Discount Code</h4>
+            <div style={{ marginBottom: '10px' }}>
+              <input
+                type="text"
+                placeholder="Enter code (e.g., SAVE15)"
+                value={redeemCode}
+                onChange={(e) => setRedeemCode(e.target.value.toUpperCase())}
+                style={{ width: '100%', padding: '8px', textTransform: 'uppercase' }}
+                required
+              />
+            </div>
+            {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
+            <button type="submit" style={{ padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer' }}>
+              Redeem
             </button>
           </form>
         )}

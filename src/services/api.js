@@ -94,6 +94,7 @@ export const customerAPI = {
 
   // Discounts
   getMachineDiscounts: () => api.get('/customer/machine/discounts'),
+  redeemDiscount: (data) => api.post('/customer/discounts/redeem', data),
 
   // Profile
   getProfile: () => api.get('/customer/profile'),
