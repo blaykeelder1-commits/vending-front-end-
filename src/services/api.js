@@ -74,6 +74,11 @@ export const vendorAPI = {
   getMachineDiscounts: (machineId) => api.get(`/vendor/machines/${machineId}/discounts`),
   createDiscount: (machineId, data) => api.post(`/vendor/machines/${machineId}/discounts`, data),
   deleteDiscount: (machineId, discountId) => api.delete(`/vendor/machines/${machineId}/discounts/${discountId}`),
+
+  // Polls
+  getMachinePolls: (machineId) => api.get(`/vendor/machines/${machineId}/polls`),
+  createPoll: (machineId, data) => api.post(`/vendor/machines/${machineId}/polls`, data),
+  getPollResults: (pollId) => api.get(`/vendor/polls/${pollId}/results`),
 };
 
 // Customer API

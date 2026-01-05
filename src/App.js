@@ -408,8 +408,10 @@ function MachineDetails() {
   const [inventory, setInventory] = useState([]);
   const [products, setProducts] = useState([]);
   const [discounts, setDiscounts] = useState([]);
+  const [polls, setPolls] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showDiscountForm, setShowDiscountForm] = useState(false);
+  const [showPollForm, setShowPollForm] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState('');
   const [stockQuantity, setStockQuantity] = useState('');
   const [discountCode, setDiscountCode] = useState('');
@@ -417,6 +419,8 @@ function MachineDetails() {
   const [percentOff, setPercentOff] = useState('');
   const [startsAt, setStartsAt] = useState('');
   const [endsAt, setEndsAt] = useState('');
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [pollOptions, setPollOptions] = useState([{ optionText: '', imageUrl: '' }]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -427,11 +431,12 @@ function MachineDetails() {
   const loadMachineData = async () => {
     try {
       setLoading(true);
-      const [machineRes, inventoryRes, productsRes, discountsRes] = await Promise.allSettled([
+      const [machineRes, inventoryRes, productsRes, discountsRes, pollsRes] = await Promise.allSettled([
         vendorAPI.getMachine(id),
         vendorAPI.getMachineInventory(id),
         vendorAPI.getProducts(),
-        vendorAPI.getMachineDiscounts(id)
+        vendorAPI.getMachineDiscounts(id),
+        vendorAPI.getMachinePolls(id)
       ]);
 
       if (machineRes.status === 'fulfilled') {
@@ -459,6 +464,12 @@ function MachineDetails() {
         setDiscounts(discountsRes.value.data.data.discounts);
       } else {
         console.error('Discounts API failed:', discountsRes.reason);
+      }
+
+      if (pollsRes.status === 'fulfilled') {
+        setPolls(pollsRes.value.data.data.polls || []);
+      } else {
+        console.error('Polls API failed:', pollsRes.reason);
       }
     } catch (err) {
       console.error('Error loading machine data:', err);
@@ -528,6 +539,52 @@ function MachineDetails() {
       console.error('Error deleting discount:', err);
       alert('Error: ' + (err.response?.data?.message || 'Failed to delete discount'));
     }
+  };
+
+  const handleCreatePoll = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      const validOptions = pollOptions.filter(opt => opt.optionText.trim() !== '');
+      if (validOptions.length < 2) {
+        setError('Please provide at least 2 options');
+        return;
+      }
+
+      await vendorAPI.createPoll(id, {
+        question: pollQuestion,
+        options: validOptions.map(opt => ({
+          optionText: opt.optionText,
+          imageUrl: opt.imageUrl || null
+        }))
+      });
+
+      setPollQuestion('');
+      setPollOptions([{ optionText: '', imageUrl: '' }]);
+      setShowPollForm(false);
+      loadMachineData();
+      alert('Poll created successfully!');
+    } catch (err) {
+      console.error('Error creating poll:', err);
+      const errorMsg = err.response?.data?.message || 'Failed to create poll';
+      setError(errorMsg);
+      alert('Error: ' + errorMsg);
+    }
+  };
+
+  const handleAddPollOption = () => {
+    setPollOptions([...pollOptions, { optionText: '', imageUrl: '' }]);
+  };
+
+  const handleRemovePollOption = (index) => {
+    if (pollOptions.length <= 1) return;
+    setPollOptions(pollOptions.filter((_, i) => i !== index));
+  };
+
+  const handlePollOptionChange = (index, field, value) => {
+    const updated = [...pollOptions];
+    updated[index][field] = value;
+    setPollOptions(updated);
   };
 
   if (loading) return <div style={{ padding: '20px' }}>Loading...</div>;
@@ -713,6 +770,213 @@ function MachineDetails() {
             ))
           )}
         </div>
+      </div>
+
+      {/* Polls Section */}
+      <div style={{ marginTop: '40px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3>Product Polls ({polls.filter(p => p.is_active).length} active)</h3>
+          <button
+            onClick={() => setShowPollForm(!showPollForm)}
+            style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', cursor: 'pointer' }}
+          >
+            {showPollForm ? 'Cancel' : 'Create Poll'}
+          </button>
+        </div>
+
+        {showPollForm && (
+          <form onSubmit={handleCreatePoll} style={{ backgroundColor: '#f8f9fa', padding: '20px', marginTop: '10px', borderRadius: '5px' }}>
+            <h4>Create Product Poll</h4>
+            <div style={{ marginBottom: '15px' }}>
+              <input
+                type="text"
+                placeholder="Poll Question (e.g., 'What products should we add?')"
+                value={pollQuestion}
+                onChange={(e) => setPollQuestion(e.target.value)}
+                style={{ width: '100%', padding: '8px' }}
+                required
+              />
+            </div>
+
+            <h5>Poll Options:</h5>
+            {pollOptions.map((option, index) => (
+              <div key={index} style={{ marginBottom: '15px', padding: '15px', backgroundColor: 'white', borderRadius: '5px', border: '1px solid #ddd' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <strong>Option {index + 1}</strong>
+                  {pollOptions.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePollOption(index)}
+                      style={{ padding: '5px 10px', backgroundColor: '#dc3545', color: 'white', border: 'none', cursor: 'pointer', fontSize: '12px', borderRadius: '3px' }}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <div style={{ marginBottom: '10px' }}>
+                  <input
+                    type="text"
+                    placeholder="Option text (e.g., 'Honey Buns')"
+                    value={option.optionText}
+                    onChange={(e) => handlePollOptionChange(index, 'optionText', e.target.value)}
+                    style={{ width: '100%', padding: '8px' }}
+                    required
+                  />
+                </div>
+                <div>
+                  <input
+                    type="url"
+                    placeholder="Image URL (optional)"
+                    value={option.imageUrl}
+                    onChange={(e) => handlePollOptionChange(index, 'imageUrl', e.target.value)}
+                    style={{ width: '100%', padding: '8px' }}
+                  />
+                </div>
+              </div>
+            ))}
+
+            <button
+              type="button"
+              onClick={handleAddPollOption}
+              style={{ padding: '10px 20px', backgroundColor: '#6c757d', color: 'white', border: 'none', cursor: 'pointer', marginBottom: '15px', borderRadius: '5px' }}
+            >
+              + Add Option
+            </button>
+
+            {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
+            <div>
+              <button type="submit" style={{ padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer', borderRadius: '5px' }}>
+                Create Poll
+              </button>
+            </div>
+          </form>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px', marginTop: '20px' }}>
+          {polls.length === 0 ? (
+            <p>No polls created yet.</p>
+          ) : (
+            polls.map(poll => (
+              <div key={poll.id} style={{ border: '1px solid #ddd', padding: '15px', borderRadius: '5px', backgroundColor: poll.is_active ? '#fff' : '#f8f9fa' }}>
+                <h4 style={{ margin: '0 0 10px 0' }}>{poll.poll_question}</h4>
+                <p style={{ fontSize: '14px', color: '#666', marginBottom: '10px' }}>
+                  <strong>Options:</strong> {poll.option_count || 0}
+                </p>
+                <p style={{ fontSize: '14px', marginBottom: '10px' }}>
+                  <span style={{ padding: '3px 8px', borderRadius: '3px', backgroundColor: poll.is_active ? '#28a745' : '#6c757d', color: 'white', fontSize: '12px' }}>
+                    {poll.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                </p>
+                <Link
+                  to={`/vendor/polls/${poll.id}/results`}
+                  style={{ color: '#007bff', fontSize: '14px', textDecoration: 'underline' }}
+                >
+                  View Results
+                </Link>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PollResults() {
+  const { pollId } = useParams();
+  const [results, setResults] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadResults();
+  }, [pollId]);
+
+  const loadResults = async () => {
+    try {
+      const response = await vendorAPI.getPollResults(pollId);
+      setResults(response.data.data);
+    } catch (err) {
+      console.error('Error loading poll results:', err);
+      alert('Error: ' + (err.response?.data?.message || 'Failed to load results'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <div style={{ padding: '20px' }}>Loading...</div>;
+
+  if (!results) {
+    return (
+      <div style={{ padding: '20px' }}>
+        <Link to="/vendor/dashboard" style={{ color: '#007bff' }}>← Back to Dashboard</Link>
+        <p>Poll not found.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: '20px' }}>
+      <Link to="/vendor/dashboard" style={{ color: '#007bff', marginBottom: '20px', display: 'inline-block' }}>← Back to Dashboard</Link>
+
+      <h2>{results.poll.poll_question}</h2>
+      <p style={{ color: '#666', marginBottom: '20px' }}>
+        <strong>Machine:</strong> {results.poll.machine_name} | <strong>Total Votes:</strong> {results.totalVotes}
+      </p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '20px' }}>
+        {results.options.map(option => (
+          <div key={option.option_id} style={{ border: '1px solid #ddd', padding: '20px', borderRadius: '5px', backgroundColor: 'white' }}>
+            {option.image_url && (
+              <div style={{ marginBottom: '15px', textAlign: 'center' }}>
+                <img
+                  src={option.image_url}
+                  alt={option.option_text}
+                  style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '8px', objectFit: 'contain' }}
+                  onError={(e) => { e.target.style.display = 'none'; }}
+                />
+              </div>
+            )}
+            <h3 style={{ margin: '0 0 15px 0' }}>{option.option_text}</h3>
+
+            <div style={{ marginBottom: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                <span style={{ color: '#28a745', fontWeight: 'bold' }}>Approve</span>
+                <span style={{ color: '#28a745', fontWeight: 'bold' }}>{option.approve_count} ({option.approve_percent}%)</span>
+              </div>
+              <div style={{ width: '100%', height: '20px', backgroundColor: '#e9ecef', borderRadius: '10px', overflow: 'hidden' }}>
+                <div
+                  style={{
+                    width: `${option.approve_percent}%`,
+                    height: '100%',
+                    backgroundColor: '#28a745',
+                    transition: 'width 0.3s ease'
+                  }}
+                />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '10px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                <span style={{ color: '#dc3545', fontWeight: 'bold' }}>Deny</span>
+                <span style={{ color: '#dc3545', fontWeight: 'bold' }}>{option.deny_count} ({100 - option.approve_percent}%)</span>
+              </div>
+              <div style={{ width: '100%', height: '20px', backgroundColor: '#e9ecef', borderRadius: '10px', overflow: 'hidden' }}>
+                <div
+                  style={{
+                    width: `${100 - option.approve_percent}%`,
+                    height: '100%',
+                    backgroundColor: '#dc3545',
+                    transition: 'width 0.3s ease'
+                  }}
+                />
+              </div>
+            </div>
+
+            <p style={{ marginTop: '15px', fontSize: '14px', color: '#666', textAlign: 'center' }}>
+              <strong>Total Votes:</strong> {option.total_votes}
+            </p>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -1124,28 +1388,57 @@ function CustomerProducts() {
 }
 
 function CustomerPolls() {
-  const [polls, setPolls] = useState([]);
+  const [poll, setPoll] = useState(null);
+  const [currentOptionIndex, setCurrentOptionIndex] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [completed, setCompleted] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/customer/login?returnTo=/customer/polls');
+      return;
+    }
     loadPolls();
-  }, []);
+  }, [navigate]);
 
   const loadPolls = async () => {
     try {
       const response = await customerAPI.getPolls();
-      setPolls(response.data.data.polls);
+      const pollData = response.data.data.poll;
+
+      if (!pollData) {
+        setCompleted(true);
+      } else {
+        setPoll(pollData);
+        setCurrentOptionIndex(0);
+      }
     } catch (err) {
       console.error('Error loading polls:', err);
+      setCompleted(true);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVote = async (pollId, optionId) => {
+  const handleVote = async (voteType) => {
+    if (!poll || !poll.options[currentOptionIndex]) return;
+
     try {
-      await customerAPI.votePoll(pollId, { pollOptionId: optionId });
-      loadPolls();
+      const currentOption = poll.options[currentOptionIndex];
+      await customerAPI.votePoll(poll.id, {
+        optionId: currentOption.id,
+        voteType: voteType
+      });
+
+      // Move to next option
+      if (currentOptionIndex < poll.options.length - 1) {
+        setCurrentOptionIndex(currentOptionIndex + 1);
+      } else {
+        // Finished all options
+        setCompleted(true);
+      }
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to vote');
     }
@@ -1153,47 +1446,99 @@ function CustomerPolls() {
 
   if (loading) return <div style={{ padding: '20px' }}>Loading...</div>;
 
-  return (
-    <div style={{ padding: '20px' }}>
-      <h1>Product Polls</h1>
-      <Link to="/customer/portal" style={{ color: '#007bff' }}>Back to Portal</Link>
+  if (completed || !poll || poll.options.length === 0) {
+    return (
+      <div style={{ padding: '20px', maxWidth: '500px', margin: '50px auto', textAlign: 'center' }}>
+        <h1>Product Polls</h1>
+        <div style={{ marginTop: '40px', padding: '30px', backgroundColor: '#f8f9fa', borderRadius: '10px' }}>
+          <h2 style={{ color: '#28a745', marginBottom: '15px' }}>Thank you for your help!</h2>
+          <p style={{ fontSize: '18px', color: '#666' }}>Enjoy your day.</p>
+        </div>
+        <button
+          onClick={() => navigate('/customer/portal')}
+          style={{ marginTop: '30px', padding: '12px 30px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '16px' }}
+        >
+          Back to Portal
+        </button>
+      </div>
+    );
+  }
 
-      <div style={{ marginTop: '20px' }}>
-        {polls.length === 0 ? (
-          <p>No active polls at this time.</p>
-        ) : (
-          polls.map(poll => (
-            <div key={poll.id} style={{ border: '1px solid #ddd', padding: '20px', marginBottom: '20px', borderRadius: '5px' }}>
-              <h3>{poll.question}</h3>
-              {poll.hasVoted ? (
-                <div>
-                  <p style={{ color: '#28a745', fontWeight: 'bold' }}>✓ You have voted</p>
-                  <div>
-                    {poll.options.map(option => (
-                      <div key={option.id} style={{ marginBottom: '10px', padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '5px' }}>
-                        <div>{option.option_text}</div>
-                        <div style={{ fontSize: '14px', color: '#666' }}>Votes: {option.vote_count}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  {poll.options.map(option => (
-                    <button
-                      key={option.id}
-                      onClick={() => handleVote(poll.id, option.id)}
-                      style={{ display: 'block', width: '100%', padding: '15px', marginBottom: '10px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer', borderRadius: '5px', textAlign: 'left' }}
-                    >
-                      {option.option_text}
-                      {option.product_name && <div style={{ fontSize: '14px', marginTop: '5px' }}>Product: {option.product_name}</div>}
-                    </button>
-                  ))}
-                </div>
-              )}
+  const currentOption = poll.options[currentOptionIndex];
+  const progress = `${currentOptionIndex + 1} / ${poll.options.length}`;
+
+  return (
+    <div style={{ padding: '20px', maxWidth: '500px', margin: '0 auto', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ marginBottom: '20px' }}>
+        <Link to="/customer/portal" style={{ color: '#007bff' }}>← Back to Portal</Link>
+      </div>
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <h2 style={{ textAlign: 'center', marginBottom: '10px' }}>{poll.question}</h2>
+        <p style={{ textAlign: 'center', color: '#666', marginBottom: '30px' }}>{progress}</p>
+
+        {/* Card */}
+        <div style={{
+          backgroundColor: 'white',
+          border: '2px solid #ddd',
+          borderRadius: '15px',
+          padding: '30px',
+          marginBottom: '30px',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+          textAlign: 'center'
+        }}>
+          {currentOption.image_url && (
+            <div style={{ marginBottom: '20px' }}>
+              <img
+                src={currentOption.image_url}
+                alt={currentOption.option_text}
+                style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '10px', objectFit: 'contain' }}
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
             </div>
-          ))
-        )}
+          )}
+          <h3 style={{ fontSize: '24px', margin: '0', color: '#333' }}>{currentOption.option_text}</h3>
+        </div>
+
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
+          <button
+            onClick={() => handleVote('dislike')}
+            style={{
+              flex: 1,
+              maxWidth: '200px',
+              padding: '20px',
+              backgroundColor: '#dc3545',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              cursor: 'pointer',
+              fontSize: '18px',
+              fontWeight: 'bold',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+            }}
+          >
+            Deny
+          </button>
+          <button
+            onClick={() => handleVote('like')}
+            style={{
+              flex: 1,
+              maxWidth: '200px',
+              padding: '20px',
+              backgroundColor: '#28a745',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              cursor: 'pointer',
+              fontSize: '18px',
+              fontWeight: 'bold',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+            }}
+          >
+            Approve
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1709,6 +2054,7 @@ function App() {
         <Route path="/vendor/login" element={<VendorLogin />} />
         <Route path="/vendor/dashboard" element={<VendorDashboard />} />
         <Route path="/vendor/machines/:id" element={<MachineDetails />} />
+        <Route path="/vendor/polls/:pollId/results" element={<PollResults />} />
 
         {/* Customer Routes */}
         <Route path="/customer/login" element={<CustomerLogin />} />
