@@ -722,11 +722,106 @@ function MachineDetails() {
 // CUSTOMER COMPONENTS
 // ============================================
 
-function CustomerQRLogin() {
+function CustomerLogin() {
+  const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
+  const location = window.location;
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      const data = isLogin
+        ? { email, password }
+        : { email, password, fullName };
+
+      const response = isLogin
+        ? await authAPI.customerLogin(data)
+        : await authAPI.customerRegister(data);
+
+      const token = response.data.data.token;
+      localStorage.setItem('token', token);
+      localStorage.setItem('userType', 'customer');
+
+      // Check for returnTo query parameter
+      const params = new URLSearchParams(location.search);
+      const returnTo = params.get('returnTo') || '/customer/portal';
+      navigate(returnTo);
+    } catch (err) {
+      console.error('Customer auth error:', err);
+      setError(err.response?.data?.message || 'Authentication failed');
+    }
+  };
+
+  return (
+    <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px' }}>
+      <h2>Customer {isLogin ? 'Login' : 'Register'}</h2>
+      <form onSubmit={handleSubmit}>
+        {!isLogin && (
+          <div style={{ marginBottom: '10px' }}>
+            <input
+              type="text"
+              placeholder="Full Name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              style={{ width: '100%', padding: '8px' }}
+              required
+            />
+          </div>
+        )}
+        <div style={{ marginBottom: '10px' }}>
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={{ width: '100%', padding: '8px' }}
+            required
+          />
+        </div>
+        <div style={{ marginBottom: '10px' }}>
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={{ width: '100%', padding: '8px' }}
+            required
+          />
+        </div>
+        {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
+        <button type="submit" style={{ width: '100%', padding: '10px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer' }}>
+          {isLogin ? 'Login' : 'Register'}
+        </button>
+      </form>
+      <p style={{ textAlign: 'center', marginTop: '20px' }}>
+        <button onClick={() => setIsLogin(!isLogin)} style={{ background: 'none', border: 'none', color: '#007bff', cursor: 'pointer', textDecoration: 'underline' }}>
+          {isLogin ? 'Need an account? Register' : 'Have an account? Login'}
+        </button>
+      </p>
+      <p style={{ textAlign: 'center', marginTop: '20px' }}>
+        <Link to="/" style={{ color: '#007bff' }}>Back to Home</Link>
+      </p>
+    </div>
+  );
+}
+
+function CustomerQRScan() {
   const [qrData, setQrData] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const location = window.location;
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/customer/login?returnTo=/customer/scan');
+    }
+  }, [navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -747,7 +842,7 @@ function CustomerQRLogin() {
 
   return (
     <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px' }}>
-      <h2>Customer QR Login</h2>
+      <h2>Scan QR Code</h2>
       <p>Scan the QR code on your vending machine or paste the QR data below:</p>
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: '10px' }}>
@@ -761,10 +856,13 @@ function CustomerQRLogin() {
         </div>
         {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
         <button type="submit" style={{ width: '100%', padding: '10px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer' }}>
-          Login with QR
+          Scan QR Code
         </button>
       </form>
       <p style={{ textAlign: 'center', marginTop: '20px' }}>
+        <Link to="/customer/portal" style={{ color: '#007bff' }}>View Portal</Link>
+      </p>
+      <p style={{ textAlign: 'center', marginTop: '10px' }}>
         <Link to="/" style={{ color: '#007bff' }}>Back to Home</Link>
       </p>
     </div>
@@ -1104,10 +1202,16 @@ function CustomerPolls() {
 function CustomerLoyalty() {
   const [loyalty, setLoyalty] = useState(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/customer/login?returnTo=/customer/portal');
+      return;
+    }
     loadLoyalty();
-  }, []);
+  }, [navigate]);
 
   const loadLoyalty = async () => {
     try {
@@ -1184,7 +1288,8 @@ function App() {
         <Route path="/vendor/machines/:id" element={<MachineDetails />} />
 
         {/* Customer Routes */}
-        <Route path="/customer/login" element={<CustomerQRLogin />} />
+        <Route path="/customer/login" element={<CustomerLogin />} />
+        <Route path="/customer/scan" element={<CustomerQRScan />} />
         <Route path="/customer/machine/:machineId" element={<CustomerMachine />} />
         <Route path="/customer/products" element={<CustomerProducts />} />
         <Route path="/customer/polls" element={<CustomerPolls />} />

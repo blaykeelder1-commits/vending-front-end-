@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -42,6 +42,8 @@ api.interceptors.response.use(
 export const authAPI = {
   vendorRegister: (data) => api.post('/auth/vendor/register', data),
   vendorLogin: (data) => api.post('/auth/vendor/login', data),
+  customerRegister: (data) => api.post('/auth/customer/register', data),
+  customerLogin: (data) => api.post('/auth/customer/login', data),
   customerQRLogin: (data) => api.post('/auth/customer/qr-login', data),
   verify: () => api.get('/auth/verify'),
 };
