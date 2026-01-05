@@ -829,7 +829,7 @@ function CustomerProducts() {
 
       <div style={{ marginBottom: '20px' }}>
         <Link to="/customer/polls" style={{ marginRight: '15px', color: '#007bff' }}>View Polls</Link>
-        <Link to="/customer/loyalty" style={{ color: '#007bff' }}>Loyalty Points</Link>
+        <Link to="/customer/portal" style={{ color: '#007bff' }}>Customer Portal</Link>
       </div>
 
       <h2>Available Products</h2>
@@ -1007,7 +1007,7 @@ function CustomerLoyalty() {
 
   return (
     <div style={{ padding: '20px' }}>
-      <h1>Loyalty Points</h1>
+      <h1>Customer Portal</h1>
       <Link to="/customer/products" style={{ color: '#007bff' }}>Back to Products</Link>
 
       <div style={{ marginTop: '20px' }}>
@@ -1071,6 +1071,7 @@ function App() {
         <Route path="/customer/products" element={<CustomerProducts />} />
         <Route path="/customer/polls" element={<CustomerPolls />} />
         <Route path="/customer/loyalty" element={<CustomerLoyalty />} />
+        <Route path="/customer/portal" element={<CustomerLoyalty />} />
 
         {/* Default redirect */}
         <Route path="*" element={<Navigate to="/" />} />
