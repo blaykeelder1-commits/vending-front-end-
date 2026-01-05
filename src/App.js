@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { authAPI, vendorAPI, customerAPI } from './services/api';
+import QRCode from 'qrcode';
 import './App.css';
 
 // ============================================
@@ -175,6 +176,23 @@ function VendorDashboard() {
     navigate('/vendor/login');
   };
 
+  const handleDownloadQR = async (machineId) => {
+    try {
+      const baseUrl = process.env.REACT_APP_FRONTEND_URL || window.location.origin;
+      const qrUrl = `${baseUrl}/customer/machine/${machineId}`;
+
+      const qrDataUrl = await QRCode.toDataURL(qrUrl, { width: 512 });
+
+      const link = document.createElement('a');
+      link.href = qrDataUrl;
+      link.download = `machine-${machineId}-qr.png`;
+      link.click();
+    } catch (err) {
+      console.error('Error generating QR:', err);
+      alert('Failed to generate QR code');
+    }
+  };
+
   return (
     <div style={{ padding: '20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -212,7 +230,15 @@ function VendorDashboard() {
               <p><strong>Location:</strong> {machine.location}</p>
               <p><strong>Status:</strong> {machine.is_active ? '✅ Active' : '❌ Inactive'}</p>
               <p style={{ fontSize: '12px', color: '#666', wordBreak: 'break-all' }}>QR: {machine.qr_code_data?.substring(0, 30)}...</p>
-              <Link to={`/vendor/machines/${machine.id}`} style={{ color: '#007bff' }}>View Details</Link>
+              <div style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
+                <Link to={`/vendor/machines/${machine.id}`} style={{ color: '#007bff' }}>View Details</Link>
+                <button
+                  onClick={() => handleDownloadQR(machine.id)}
+                  style={{ padding: '5px 10px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer', fontSize: '12px' }}
+                >
+                  Download QR
+                </button>
+              </div>
             </div>
           ))}
         </div>
