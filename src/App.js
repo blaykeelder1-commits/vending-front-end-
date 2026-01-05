@@ -1199,6 +1199,229 @@ function CustomerPolls() {
   );
 }
 
+function DiscountHub() {
+  const [discountCode, setDiscountCode] = useState('');
+  const [showScanner, setShowScanner] = useState(false);
+  const [selectedMachineId, setSelectedMachineId] = useState(null);
+  const [loyalty, setLoyalty] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/customer/login?returnTo=/customer/discount-hub');
+      return;
+    }
+    loadLoyalty();
+    const savedMachineId = localStorage.getItem('selectedMachineId');
+    if (savedMachineId) {
+      setSelectedMachineId(parseInt(savedMachineId));
+    }
+  }, [navigate]);
+
+  const loadLoyalty = async () => {
+    try {
+      const response = await customerAPI.getLoyalty();
+      setLoyalty(response.data.data);
+    } catch (err) {
+      console.error('Error loading loyalty:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRedeemDiscount = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    if (!selectedMachineId) {
+      setError('Please scan QR code to select a machine first');
+      return;
+    }
+
+    try {
+      const response = await customerAPI.redeemDiscount({ code: discountCode });
+      alert(response.data.message || 'Discount redeemed successfully!');
+      setDiscountCode('');
+      loadLoyalty();
+    } catch (err) {
+      console.error('Error redeeming discount:', err);
+      const errorMsg = err.response?.data?.message || 'Failed to redeem discount';
+      setError(errorMsg);
+    }
+  };
+
+  const handleSelectMachine = (machineId) => {
+    setSelectedMachineId(machineId);
+    localStorage.setItem('selectedMachineId', machineId.toString());
+    setShowScanner(false);
+  };
+
+  const handleRedeemReward = async (rewardName) => {
+    if ((loyalty?.totalPoints || 0) < 100) {
+      alert('You need at least 100 points to redeem a reward');
+      return;
+    }
+
+    alert(`Redeeming ${rewardName} for 100 points (Backend integration pending)`);
+  };
+
+  if (loading) return <div style={{ padding: '20px' }}>Loading...</div>;
+
+  const totalPoints = loyalty?.totalPoints || 0;
+  const progressPercent = Math.min((totalPoints % 100), 100);
+  const canRedeem = totalPoints >= 100;
+
+  const rewards = [
+    { name: 'Honey Buns', points: 100 },
+    { name: 'Coke', points: 100 },
+    { name: 'Sprite', points: 100 },
+    { name: 'Sandwich', points: 100 },
+    { name: 'Chips', points: 100 },
+    { name: 'Water', points: 100 },
+  ];
+
+  return (
+    <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
+      <h1>Discount Hub</h1>
+      <button onClick={() => navigate('/customer/portal')} style={{ marginBottom: '20px', padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
+        ← Back to Portal
+      </button>
+
+      <div style={{ backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '5px', marginBottom: '20px' }}>
+        <h3 style={{ marginTop: 0 }}>Selected Machine</h3>
+        {selectedMachineId ? (
+          <p style={{ color: '#28a745', fontWeight: 'bold' }}>Machine #{selectedMachineId} selected</p>
+        ) : (
+          <p style={{ color: '#dc3545' }}>No machine selected</p>
+        )}
+        <button
+          onClick={() => setShowScanner(!showScanner)}
+          style={{ padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', marginTop: '10px' }}
+        >
+          {showScanner ? 'Close Scanner' : 'Scan QR Code'}
+        </button>
+      </div>
+
+      {showScanner && (
+        <div style={{ backgroundColor: '#fff', padding: '20px', border: '2px solid #007bff', borderRadius: '5px', marginBottom: '20px' }}>
+          <h3>Scan Machine QR Code</h3>
+          <p>Enter machine ID manually or scan QR code:</p>
+          <input
+            type="number"
+            placeholder="Enter Machine ID"
+            style={{ width: '100%', padding: '10px', marginBottom: '10px', borderRadius: '5px', border: '1px solid #ddd' }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && e.target.value) {
+                handleSelectMachine(parseInt(e.target.value));
+              }
+            }}
+          />
+          <button
+            onClick={() => navigate('/customer/scan')}
+            style={{ width: '100%', padding: '10px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}
+          >
+            Open Camera Scanner
+          </button>
+        </div>
+      )}
+
+      <div style={{ backgroundColor: '#fff', padding: '20px', border: '1px solid #ddd', borderRadius: '5px', marginBottom: '20px' }}>
+        <h3 style={{ marginTop: 0 }}>Redeem Discount Code</h3>
+        <form onSubmit={handleRedeemDiscount}>
+          <input
+            type="text"
+            placeholder="Enter discount code"
+            value={discountCode}
+            onChange={(e) => setDiscountCode(e.target.value)}
+            style={{ width: '100%', padding: '10px', marginBottom: '10px', borderRadius: '5px', border: '1px solid #ddd' }}
+            required
+          />
+          {error && <div style={{ color: 'red', marginBottom: '10px', fontSize: '14px' }}>{error}</div>}
+          <button
+            type="submit"
+            style={{ width: '100%', padding: '12px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+            Redeem Discount
+          </button>
+        </form>
+      </div>
+
+      <div style={{ backgroundColor: '#fff', padding: '20px', border: '1px solid #ddd', borderRadius: '5px', marginBottom: '20px' }}>
+        <h3 style={{ marginTop: 0 }}>Points Progress</h3>
+        <p style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '10px' }}>
+          {totalPoints} / 100 points toward next reward
+        </p>
+        <div style={{ width: '100%', height: '30px', backgroundColor: '#e9ecef', borderRadius: '15px', overflow: 'hidden', position: 'relative' }}>
+          <div
+            style={{
+              width: `${progressPercent}%`,
+              height: '100%',
+              backgroundColor: totalPoints >= 100 ? '#28a745' : '#007bff',
+              transition: 'width 0.3s ease',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              fontWeight: 'bold',
+              fontSize: '14px'
+            }}
+          >
+            {progressPercent}%
+          </div>
+        </div>
+        {canRedeem && (
+          <p style={{ color: '#28a745', fontWeight: 'bold', marginTop: '10px' }}>
+            🎉 You have enough points to redeem a reward!
+          </p>
+        )}
+      </div>
+
+      <div style={{ backgroundColor: '#fff', padding: '20px', border: '1px solid #ddd', borderRadius: '5px' }}>
+        <h3 style={{ marginTop: 0 }}>Available Rewards (100 Points Each)</h3>
+        {rewards.map((reward, index) => (
+          <div
+            key={index}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '15px',
+              marginBottom: '10px',
+              backgroundColor: '#f8f9fa',
+              borderRadius: '5px',
+              border: '1px solid #dee2e6'
+            }}
+          >
+            <div>
+              <strong>{reward.name}</strong>
+              <p style={{ margin: '5px 0 0 0', fontSize: '14px', color: '#666' }}>{reward.points} points</p>
+            </div>
+            <button
+              onClick={() => handleRedeemReward(reward.name)}
+              disabled={!canRedeem}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: canRedeem ? '#28a745' : '#6c757d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '5px',
+                cursor: canRedeem ? 'pointer' : 'not-allowed',
+                fontWeight: 'bold',
+                opacity: canRedeem ? 1 : 0.6
+              }}
+            >
+              {canRedeem ? 'Redeem' : 'Locked'}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CustomerLoyalty() {
   const [loyalty, setLoyalty] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1240,6 +1463,23 @@ function CustomerLoyalty() {
               <h2 style={{ margin: 0 }}>Total Points: {loyalty?.totalPoints || 0}</h2>
               <p style={{ margin: '5px 0 0 0' }}>Lifetime Points: {loyalty?.totalLifetimePoints || 0}</p>
             </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
+              <button
+                onClick={() => navigate('/customer/polls')}
+                style={{ flex: 1, padding: '15px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}
+              >
+                View Polls
+              </button>
+              <button
+                onClick={() => navigate('/customer/discount-hub')}
+                style={{ flex: 1, padding: '15px', backgroundColor: '#ffc107', color: '#000', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}
+              >
+                Discount Hub
+              </button>
+            </div>
+
             {loyalty?.loyaltyAccounts?.map(account => (
               <div key={account.id} style={{ border: '1px solid #ddd', padding: '15px', marginBottom: '10px', borderRadius: '5px' }}>
                 <h3>{account.machine_name}</h3>
@@ -1295,6 +1535,7 @@ function App() {
         <Route path="/customer/polls" element={<CustomerPolls />} />
         <Route path="/customer/loyalty" element={<CustomerLoyalty />} />
         <Route path="/customer/portal" element={<CustomerLoyalty />} />
+        <Route path="/customer/discount-hub" element={<DiscountHub />} />
 
         {/* Default redirect */}
         <Route path="*" element={<Navigate to="/" />} />
