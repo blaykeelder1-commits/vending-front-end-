@@ -1,11 +1,168 @@
-import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, Navigate, useNavigate, useParams } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useContext, createContext, useCallback } from 'react';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate, useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
 import { authAPI, vendorAPI, customerAPI, publicAPI } from './services/api';
 import QRCode from 'qrcode';
 import { jsPDF } from 'jspdf';
 import './App.css';
 
 const FRONTEND_URL = process.env.REACT_APP_FRONTEND_URL || window.location.origin;
+
+// ============================================
+// TOAST NOTIFICATION SYSTEM
+// ============================================
+const ToastContext = createContext();
+
+export const useToast = () => {
+  const context = useContext(ToastContext);
+  if (!context) {
+    throw new Error('useToast must be used within a ToastProvider');
+  }
+  return context;
+};
+
+function ToastProvider({ children }) {
+  const [toasts, setToasts] = useState([]);
+
+  const addToast = useCallback((message, type = 'info', duration = 3000) => {
+    const id = Date.now() + Math.random();
+    setToasts(prev => [...prev, { id, message, type }]);
+
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, duration);
+  }, []);
+
+  const toast = {
+    success: (msg) => addToast(msg, 'success'),
+    error: (msg) => addToast(msg, 'error', 4000),
+    info: (msg) => addToast(msg, 'info'),
+    warning: (msg) => addToast(msg, 'warning'),
+  };
+
+  return (
+    <ToastContext.Provider value={toast}>
+      {children}
+      <ToastContainer toasts={toasts} />
+    </ToastContext.Provider>
+  );
+}
+
+function ToastContainer({ toasts }) {
+  return (
+    <div style={{
+      position: 'fixed',
+      top: '20px',
+      right: '20px',
+      zIndex: 9999,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '10px',
+    }}>
+      {toasts.map(toast => (
+        <Toast key={toast.id} {...toast} />
+      ))}
+    </div>
+  );
+}
+
+function Toast({ message, type }) {
+  const colors = {
+    success: { bg: '#22c55e20', border: '#22c55e', text: '#22c55e' },
+    error: { bg: '#ef444420', border: '#ef4444', text: '#ef4444' },
+    info: { bg: '#8b5cf620', border: '#8b5cf6', text: '#8b5cf6' },
+    warning: { bg: '#f59e0b20', border: '#f59e0b', text: '#f59e0b' },
+  };
+  const color = colors[type] || colors.info;
+
+  return (
+    <div style={{
+      padding: '12px 20px',
+      backgroundColor: '#1a1a1a',
+      border: `1px solid ${color.border}`,
+      borderLeft: `4px solid ${color.border}`,
+      borderRadius: '8px',
+      color: color.text,
+      minWidth: '280px',
+      maxWidth: '400px',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+      animation: 'slideIn 0.3s ease-out',
+    }}>
+      {message}
+    </div>
+  );
+}
+
+// ============================================
+// THEME / STYLES
+// ============================================
+const theme = {
+  bg: '#0f0f0f',
+  surface: '#1a1a1a',
+  surfaceHover: '#252525',
+  border: '#2a2a2a',
+  primary: '#8b5cf6',
+  primaryHover: '#7c3aed',
+  success: '#22c55e',
+  danger: '#ef4444',
+  warning: '#f59e0b',
+  text: '#ffffff',
+  textSecondary: '#a1a1aa',
+  textMuted: '#71717a',
+};
+
+const styles = {
+  page: {
+    minHeight: '100vh',
+    backgroundColor: theme.bg,
+    color: theme.text,
+    padding: '20px',
+  },
+  card: {
+    backgroundColor: theme.surface,
+    border: `1px solid ${theme.border}`,
+    borderRadius: '12px',
+    padding: '20px',
+  },
+  button: {
+    padding: '12px 24px',
+    backgroundColor: theme.primary,
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontWeight: '600',
+    transition: 'all 0.2s',
+  },
+  buttonSuccess: {
+    backgroundColor: theme.success,
+  },
+  buttonDanger: {
+    backgroundColor: theme.danger,
+  },
+  buttonSecondary: {
+    backgroundColor: theme.surfaceHover,
+    border: `1px solid ${theme.border}`,
+  },
+  input: {
+    width: '100%',
+    padding: '12px 16px',
+    backgroundColor: theme.surface,
+    border: `1px solid ${theme.border}`,
+    borderRadius: '8px',
+    color: theme.text,
+    fontSize: '16px',
+  },
+  label: {
+    display: 'block',
+    marginBottom: '8px',
+    color: theme.textSecondary,
+    fontSize: '14px',
+  },
+  link: {
+    color: theme.primary,
+    textDecoration: 'none',
+  },
+};
 
 // ============================================
 // VENDOR COMPONENTS
@@ -17,89 +174,520 @@ function VendorLogin() {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
     try {
-      const data = isLogin
-        ? { email, password }
-        : { email, password, fullName };
+      const data = isLogin ? { email, password } : { email, password, fullName };
 
-      console.log('=== VENDOR LOGIN/REGISTER ===');
-      console.log('Attempting:', isLogin ? 'Login' : 'Register');
-
-      const response = isLogin
-        ? await authAPI.vendorLogin(data)
-        : await authAPI.vendorRegister(data);
-
-      console.log('Auth response:', response.data);
-      const token = response.data.data.token;
-      console.log('Token received:', token ? token.substring(0, 20) + '...' : 'NO TOKEN');
-
-      localStorage.setItem('token', token);
-      localStorage.setItem('userType', 'vendor');
-
-      console.log('Token saved to localStorage');
-      console.log('Verify localStorage token:', localStorage.getItem('token')?.substring(0, 20) + '...');
-
-      navigate('/vendor/dashboard');
+      if (isLogin) {
+        const response = await authAPI.vendorLogin(data);
+        const token = response.data.data.token;
+        localStorage.setItem('token', token);
+        localStorage.setItem('userType', 'vendor');
+        navigate('/vendor/dashboard');
+      } else {
+        // Registration - redirect to verification page
+        await authAPI.vendorRegister(data);
+        navigate(`/vendor/verify-email?email=${encodeURIComponent(email)}`);
+      }
     } catch (err) {
-      console.error('Login error:', err);
-      setError(err.response?.data?.message || 'Authentication failed');
+      const errorCode = err.response?.data?.code;
+      const errorEmail = err.response?.data?.data?.email;
+
+      if (errorCode === 'EMAIL_NOT_VERIFIED') {
+        setNeedsVerification(true);
+        setEmail(errorEmail || email);
+      } else {
+        setError(err.response?.data?.message || 'Authentication failed');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
+  const handleGoToVerification = () => {
+    navigate(`/vendor/verify-email?email=${encodeURIComponent(email)}`);
+  };
+
+  // Show verification needed message
+  if (needsVerification) {
+    return (
+      <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ ...styles.card, width: '100%', maxWidth: '400px', textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📧</div>
+          <h1 style={{ margin: '0 0 8px 0', fontSize: '24px' }}>Email Not Verified</h1>
+          <p style={{ color: theme.textSecondary, margin: '0 0 24px 0' }}>
+            Please verify your email address before logging in.
+          </p>
+          <button
+            onClick={handleGoToVerification}
+            style={{ ...styles.button, width: '100%' }}
+          >
+            Go to Verification
+          </button>
+          <button
+            onClick={() => setNeedsVerification(false)}
+            style={{ ...styles.button, ...styles.buttonSecondary, width: '100%', marginTop: '12px' }}
+          >
+            Back to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px' }}>
-      <h2>Vendor {isLogin ? 'Login' : 'Register'}</h2>
-      <form onSubmit={handleSubmit}>
-        {!isLogin && (
-          <div style={{ marginBottom: '10px' }}>
+    <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ ...styles.card, width: '100%', maxWidth: '400px' }}>
+        <h1 style={{ margin: '0 0 8px 0', fontSize: '28px' }}>
+          {isLogin ? 'Welcome Back' : 'Create Account'}
+        </h1>
+        <p style={{ color: theme.textSecondary, margin: '0 0 24px 0' }}>
+          {isLogin ? 'Sign in to manage your vending machines' : 'Start managing your vending business'}
+        </p>
+
+        <form onSubmit={handleSubmit}>
+          {!isLogin && (
+            <div style={{ marginBottom: '16px' }}>
+              <label style={styles.label}>Full Name</label>
+              <input
+                type="text"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                style={styles.input}
+                placeholder="John Doe"
+                required
+              />
+            </div>
+          )}
+          <div style={{ marginBottom: '16px' }}>
+            <label style={styles.label}>Email</label>
             <input
-              type="text"
-              placeholder="Full Name"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              style={{ width: '100%', padding: '8px' }}
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={styles.input}
+              placeholder="you@example.com"
               required
             />
           </div>
+          <div style={{ marginBottom: '24px' }}>
+            <label style={styles.label}>Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={styles.input}
+              placeholder="••••••••"
+              required
+            />
+          </div>
+
+          {error && (
+            <div style={{ color: theme.danger, marginBottom: '16px', fontSize: '14px' }}>
+              {error}
+            </div>
+          )}
+
+          <button type="submit" style={{ ...styles.button, width: '100%' }} disabled={loading}>
+            {loading ? 'Please wait...' : isLogin ? 'Sign In' : 'Create Account'}
+          </button>
+        </form>
+
+        {isLogin && (
+          <div style={{ textAlign: 'center', marginTop: '16px' }}>
+            <Link to="/vendor/forgot-password" style={{ ...styles.link, fontSize: '14px' }}>
+              Forgot your password?
+            </Link>
+          </div>
         )}
-        <div style={{ marginBottom: '10px' }}>
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={{ width: '100%', padding: '8px' }}
-            required
-          />
+
+        <p style={{ textAlign: 'center', marginTop: '16px', color: theme.textSecondary }}>
+          <button
+            onClick={() => setIsLogin(!isLogin)}
+            style={{ background: 'none', border: 'none', color: theme.primary, cursor: 'pointer' }}
+          >
+            {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
+          </button>
+        </p>
+
+        <div style={{ textAlign: 'center', marginTop: '16px' }}>
+          <Link to="/" style={styles.link}>← Back to Home</Link>
         </div>
-        <div style={{ marginBottom: '10px' }}>
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={{ width: '100%', padding: '8px' }}
-            required
-          />
+      </div>
+    </div>
+  );
+}
+
+function ForgotPassword() {
+  const [email, setEmail] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await authAPI.forgotPassword({ email });
+      setSubmitted(true);
+    } catch (err) {
+      setError(err.response?.data?.message || 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (submitted) {
+    return (
+      <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ ...styles.card, width: '100%', maxWidth: '400px', textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📬</div>
+          <h1 style={{ margin: '0 0 8px 0', fontSize: '24px' }}>Check Your Email</h1>
+          <p style={{ color: theme.textSecondary, margin: '0 0 24px 0' }}>
+            If an account exists for <strong>{email}</strong>, you'll receive a password reset link shortly.
+          </p>
+          <p style={{ color: theme.textMuted, fontSize: '14px', marginBottom: '24px' }}>
+            The link will expire in 1 hour. Check your spam folder if you don't see it.
+          </p>
+          <Link to="/vendor/login" style={{ ...styles.button, display: 'inline-block', textDecoration: 'none' }}>
+            Back to Login
+          </Link>
         </div>
-        {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
-        <button type="submit" style={{ width: '100%', padding: '10px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer' }}>
-          {isLogin ? 'Login' : 'Register'}
-        </button>
-      </form>
-      <p style={{ textAlign: 'center', marginTop: '20px' }}>
-        <button onClick={() => setIsLogin(!isLogin)} style={{ background: 'none', border: 'none', color: '#007bff', cursor: 'pointer', textDecoration: 'underline' }}>
-          {isLogin ? 'Need an account? Register' : 'Have an account? Login'}
-        </button>
-      </p>
-      <p style={{ textAlign: 'center', marginTop: '20px' }}>
-        <Link to="/" style={{ color: '#007bff' }}>Back to Home</Link>
-      </p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ ...styles.card, width: '100%', maxWidth: '400px' }}>
+        <h1 style={{ margin: '0 0 8px 0', fontSize: '24px' }}>Forgot Password?</h1>
+        <p style={{ color: theme.textSecondary, margin: '0 0 24px 0' }}>
+          Enter your email and we'll send you a reset link.
+        </p>
+
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: '24px' }}>
+            <label style={styles.label}>Email Address</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={styles.input}
+              placeholder="you@example.com"
+              required
+              autoFocus
+            />
+          </div>
+
+          {error && (
+            <div style={{ color: theme.danger, marginBottom: '16px', fontSize: '14px' }}>
+              {error}
+            </div>
+          )}
+
+          <button type="submit" style={{ ...styles.button, width: '100%' }} disabled={loading}>
+            {loading ? 'Sending...' : 'Send Reset Link'}
+          </button>
+        </form>
+
+        <div style={{ textAlign: 'center', marginTop: '24px' }}>
+          <Link to="/vendor/login" style={styles.link}>← Back to Login</Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ResetPassword() {
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token') || '';
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await authAPI.resetPassword({ token, password });
+      setSuccess(true);
+    } catch (err) {
+      const errorCode = err.response?.data?.code;
+      if (errorCode === 'INVALID_TOKEN') {
+        setError('This reset link has expired or is invalid. Please request a new one.');
+      } else {
+        setError(err.response?.data?.message || 'An error occurred');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!token) {
+    return (
+      <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ ...styles.card, width: '100%', maxWidth: '400px', textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+          <h1 style={{ margin: '0 0 8px 0', fontSize: '24px' }}>Invalid Link</h1>
+          <p style={{ color: theme.textSecondary, margin: '0 0 24px 0' }}>
+            This password reset link is invalid or has been used.
+          </p>
+          <Link to="/vendor/forgot-password" style={{ ...styles.button, display: 'inline-block', textDecoration: 'none' }}>
+            Request New Link
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (success) {
+    return (
+      <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ ...styles.card, width: '100%', maxWidth: '400px', textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
+          <h1 style={{ margin: '0 0 8px 0', fontSize: '24px' }}>Password Reset!</h1>
+          <p style={{ color: theme.textSecondary, margin: '0 0 24px 0' }}>
+            Your password has been successfully changed.
+          </p>
+          <button
+            onClick={() => navigate('/vendor/login')}
+            style={{ ...styles.button, width: '100%' }}
+          >
+            Sign In Now
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ ...styles.card, width: '100%', maxWidth: '400px' }}>
+        <h1 style={{ margin: '0 0 8px 0', fontSize: '24px' }}>Set New Password</h1>
+        <p style={{ color: theme.textSecondary, margin: '0 0 24px 0' }}>
+          Choose a strong password for your account.
+        </p>
+
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: '16px' }}>
+            <label style={styles.label}>New Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={styles.input}
+              placeholder="••••••••"
+              required
+              minLength={6}
+              autoFocus
+            />
+          </div>
+
+          <div style={{ marginBottom: '24px' }}>
+            <label style={styles.label}>Confirm Password</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              style={styles.input}
+              placeholder="••••••••"
+              required
+            />
+          </div>
+
+          {error && (
+            <div style={{
+              color: theme.danger,
+              marginBottom: '16px',
+              fontSize: '14px',
+              padding: '12px',
+              backgroundColor: theme.danger + '10',
+              borderRadius: '8px',
+            }}>
+              {error}
+            </div>
+          )}
+
+          <button type="submit" style={{ ...styles.button, width: '100%' }} disabled={loading}>
+            {loading ? 'Resetting...' : 'Reset Password'}
+          </button>
+        </form>
+
+        <div style={{ textAlign: 'center', marginTop: '24px' }}>
+          <Link to="/vendor/login" style={styles.link}>← Back to Login</Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmailVerification() {
+  const [searchParams] = useSearchParams();
+  const email = searchParams.get('email') || '';
+  const [code, setCode] = useState('');
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const navigate = useNavigate();
+
+  const handleVerify = async (e) => {
+    e.preventDefault();
+    if (code.length !== 6) {
+      setError('Please enter the 6-digit code');
+      return;
+    }
+
+    setError('');
+    setLoading(true);
+    try {
+      const response = await authAPI.verifyEmail({ email, code });
+      const token = response.data.data.token;
+      localStorage.setItem('token', token);
+      localStorage.setItem('userType', 'vendor');
+      navigate('/vendor/dashboard');
+    } catch (err) {
+      const errorCode = err.response?.data?.code;
+      if (errorCode === 'CODE_EXPIRED') {
+        setError('Code expired. Please request a new one.');
+      } else {
+        setError(err.response?.data?.message || 'Verification failed');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    setResending(true);
+    setError('');
+    setSuccess('');
+    try {
+      await authAPI.resendVerification({ email });
+      setSuccess('A new verification code has been sent to your email.');
+      setCode('');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to resend code');
+    } finally {
+      setResending(false);
+    }
+  };
+
+  const handleCodeChange = (e) => {
+    const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+    setCode(value);
+  };
+
+  return (
+    <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ ...styles.card, width: '100%', maxWidth: '400px', textAlign: 'center' }}>
+        <div style={{ fontSize: '48px', marginBottom: '16px' }}>📧</div>
+        <h1 style={{ margin: '0 0 8px 0', fontSize: '24px' }}>Verify Your Email</h1>
+        <p style={{ color: theme.textSecondary, margin: '0 0 8px 0' }}>
+          We sent a 6-digit code to:
+        </p>
+        <p style={{ fontWeight: 'bold', marginBottom: '24px' }}>{email}</p>
+
+        <form onSubmit={handleVerify}>
+          <div style={{ marginBottom: '24px' }}>
+            <input
+              type="text"
+              value={code}
+              onChange={handleCodeChange}
+              style={{
+                ...styles.input,
+                fontSize: '32px',
+                textAlign: 'center',
+                letterSpacing: '8px',
+                fontFamily: 'monospace',
+              }}
+              placeholder="000000"
+              maxLength={6}
+              autoFocus
+            />
+          </div>
+
+          {error && (
+            <div style={{
+              color: theme.danger,
+              marginBottom: '16px',
+              fontSize: '14px',
+              padding: '12px',
+              backgroundColor: theme.danger + '10',
+              borderRadius: '8px',
+            }}>
+              {error}
+            </div>
+          )}
+
+          {success && (
+            <div style={{
+              color: theme.success,
+              marginBottom: '16px',
+              fontSize: '14px',
+              padding: '12px',
+              backgroundColor: theme.success + '10',
+              borderRadius: '8px',
+            }}>
+              {success}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            style={{ ...styles.button, width: '100%' }}
+            disabled={loading || code.length !== 6}
+          >
+            {loading ? 'Verifying...' : 'Verify Email'}
+          </button>
+        </form>
+
+        <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: `1px solid ${theme.border}` }}>
+          <p style={{ color: theme.textSecondary, fontSize: '14px', marginBottom: '12px' }}>
+            Didn't receive the code?
+          </p>
+          <button
+            onClick={handleResend}
+            disabled={resending}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: theme.primary,
+              cursor: 'pointer',
+              fontWeight: '500',
+            }}
+          >
+            {resending ? 'Sending...' : 'Resend Code'}
+          </button>
+        </div>
+
+        <div style={{ textAlign: 'center', marginTop: '24px' }}>
+          <Link to="/vendor/login" style={styles.link}>← Back to Login</Link>
+        </div>
+      </div>
     </div>
   );
 }
@@ -109,65 +697,49 @@ function VendorDashboard() {
   const [products, setProducts] = useState([]);
   const [showMachineForm, setShowMachineForm] = useState(false);
   const [showProductForm, setShowProductForm] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [lastUpdateTime, setLastUpdateTime] = useState(new Date().toLocaleTimeString());
+  const [loading, setLoading] = useState(true);
+  const [expiringCount, setExpiringCount] = useState(0);
+  const [pendingSuggestions, setPendingSuggestions] = useState(0);
   const navigate = useNavigate();
+  const toast = useToast();
 
   useEffect(() => {
-    console.log('=== VENDOR DASHBOARD MOUNTED ===');
-    console.log('Token in localStorage:', localStorage.getItem('token')?.substring(0, 20) + '...');
-    console.log('UserType:', localStorage.getItem('userType'));
-
-    // Check if token exists before loading data
     const token = localStorage.getItem('token');
     if (!token) {
-      console.error('❌ NO TOKEN FOUND - Redirecting to login');
-      alert('No authentication token found. Please login again.');
       navigate('/vendor/login');
       return;
     }
-
     loadData();
-  }, []);
+  }, [navigate]);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      console.log('=== loadData() CALLED ===');
-      console.log('Current token:', localStorage.getItem('token')?.substring(0, 20) + '...');
-      const [machinesRes, productsRes] = await Promise.allSettled([
+      const [machinesRes, productsRes, expiringRes, suggestionsRes] = await Promise.allSettled([
         vendorAPI.getMachines(),
-        vendorAPI.getProducts()
+        vendorAPI.getProducts(),
+        vendorAPI.getExpiringProducts(14),
+        vendorAPI.getSuggestions({ status: 'pending' })
       ]);
-      console.log('=== API RESPONSES ===');
 
       if (machinesRes.status === 'fulfilled') {
-        console.log('Full machines response:', JSON.stringify(machinesRes.value.data, null, 2));
-        const newMachines = machinesRes.value.data.data.machines;
-        console.log('Extracted machines array:', newMachines);
-        console.log('Machines count:', newMachines?.length || 0);
-        setMachines(newMachines);
-      } else {
-        console.error('Machines API failed:', machinesRes.reason);
+        const machines = machinesRes.value?.data?.data?.machines;
+        setMachines(Array.isArray(machines) ? machines : []);
       }
-
       if (productsRes.status === 'fulfilled') {
-        console.log('Full products response:', JSON.stringify(productsRes.value.data, null, 2));
-        const newProducts = productsRes.value.data.data.products;
-        console.log('Extracted products array:', newProducts);
-        console.log('Products count:', newProducts?.length || 0);
-        setProducts(newProducts);
-      } else {
-        console.error('Products API failed:', productsRes.reason);
+        const products = productsRes.value?.data?.data?.products;
+        setProducts(Array.isArray(products) ? products : []);
       }
-
-      setLastUpdateTime(new Date().toLocaleTimeString());
-      console.log('=== STATE UPDATED ===');
+      if (expiringRes.status === 'fulfilled') {
+        const expiring = expiringRes.value?.data?.data?.products || [];
+        setExpiringCount(expiring.length);
+      }
+      if (suggestionsRes.status === 'fulfilled') {
+        const suggestions = suggestionsRes.value?.data?.data?.suggestions || [];
+        setPendingSuggestions(suggestions.length);
+      }
     } catch (err) {
-      console.error('=== ERROR IN loadData() ===');
       console.error('Error loading data:', err);
-      console.error('Full error:', err.response || err);
-      alert('Error loading data: ' + (err.response?.data?.message || err.message));
     } finally {
       setLoading(false);
     }
@@ -183,88 +755,183 @@ function VendorDashboard() {
     try {
       const response = await vendorAPI.getMachineQR(machineId);
       const qrUrl = response.data.data.qr_url;
-
       const qrDataUrl = await QRCode.toDataURL(qrUrl, { width: 512 });
-
       const link = document.createElement('a');
       link.href = qrDataUrl;
       link.download = `machine-qr-${machineId}.png`;
       link.click();
+      toast.success('QR code downloaded');
     } catch (err) {
-      console.error('Error generating QR:', err);
-      alert('Failed to generate QR code');
+      toast.error('Failed to generate QR code');
     }
   };
 
+  if (loading) {
+    return (
+      <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ padding: '20px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+    <div style={styles.page}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
         <div>
-          <h1>Vendor Dashboard</h1>
-          <p style={{ fontSize: '14px', color: '#666', margin: '5px 0 0 0' }}>
-            Last updated: {lastUpdateTime} {loading && <span style={{ color: '#007bff' }}>⟳ Refreshing...</span>}
+          <h1 style={{ margin: 0, fontSize: '32px' }}>Dashboard</h1>
+          <p style={{ color: theme.textSecondary, margin: '4px 0 0 0' }}>
+            Manage your vending machines and products
           </p>
         </div>
-        <div>
-          <button onClick={loadData} style={{ padding: '10px 20px', marginRight: '10px', backgroundColor: '#17a2b8', color: 'white', border: 'none', cursor: 'pointer' }}>
-            🔄 Refresh
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <Link to="/vendor/route-plan" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none' }}>
+            📋 Route Plan
+          </Link>
+          <Link to="/vendor/suggestions" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', position: 'relative' }}>
+            💡 Suggestions
+            {pendingSuggestions > 0 && (
+              <span style={{
+                position: 'absolute',
+                top: '-8px',
+                right: '-8px',
+                backgroundColor: theme.danger,
+                color: 'white',
+                borderRadius: '50%',
+                width: '22px',
+                height: '22px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '12px',
+                fontWeight: 'bold'
+              }}>{pendingSuggestions}</span>
+            )}
+          </Link>
+          <Link to="/vendor/expiring" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', position: 'relative' }}>
+            ⏰ Expiring
+            {expiringCount > 0 && (
+              <span style={{
+                position: 'absolute',
+                top: '-8px',
+                right: '-8px',
+                backgroundColor: theme.warning,
+                color: 'black',
+                borderRadius: '50%',
+                width: '22px',
+                height: '22px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '12px',
+                fontWeight: 'bold'
+              }}>{expiringCount}</span>
+            )}
+          </Link>
+          <Link to="/vendor/top-products" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none' }}>
+            🏆 Top 50
+          </Link>
+          <button onClick={loadData} style={{ ...styles.button, ...styles.buttonSecondary }}>
+            ↻ Refresh
           </button>
-          <button onClick={handleLogout} style={{ padding: '10px 20px', backgroundColor: '#dc3545', color: 'white', border: 'none', cursor: 'pointer' }}>
+          <button onClick={handleLogout} style={{ ...styles.button, ...styles.buttonDanger }}>
             Logout
           </button>
         </div>
       </div>
 
       {/* Machines Section */}
-      <div style={{ marginBottom: '40px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2>Vending Machines ({machines.length})</h2>
-          <button onClick={() => setShowMachineForm(!showMachineForm)} style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', cursor: 'pointer' }}>
-            {showMachineForm ? 'Cancel' : 'Add Machine'}
+      <div style={{ marginBottom: '48px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h2 style={{ margin: 0 }}>Vending Machines ({machines.length})</h2>
+          <button onClick={() => setShowMachineForm(!showMachineForm)} style={{ ...styles.button, ...styles.buttonSuccess }}>
+            {showMachineForm ? 'Cancel' : '+ Add Machine'}
           </button>
         </div>
 
         {showMachineForm && <MachineForm onSuccess={() => { setShowMachineForm(false); loadData(); }} />}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px', marginTop: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
           {machines.map(machine => (
-            <div key={machine.id} style={{ border: '1px solid #ddd', padding: '15px', borderRadius: '5px' }}>
-              <h3>{machine.machine_name}</h3>
-              <p><strong>Location:</strong> {machine.location}</p>
-              <p><strong>Status:</strong> {machine.is_active ? '✅ Active' : '❌ Inactive'}</p>
-              <p style={{ fontSize: '12px', color: '#666', wordBreak: 'break-all' }}>QR: {machine.qr_code_data?.substring(0, 30)}...</p>
-              <div style={{ marginTop: '10px', display: 'flex', gap: '10px' }}>
-                <Link to={`/vendor/machines/${machine.id}`} style={{ color: '#007bff' }}>View Details</Link>
-                <button
-                  onClick={() => handleDownloadQR(machine.id)}
-                  style={{ padding: '5px 10px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer', fontSize: '12px' }}
-                >
-                  Download QR
+            <div key={machine.id} style={styles.card}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
+                <h3 style={{ margin: 0 }}>{machine.machine_name}</h3>
+                <span style={{
+                  padding: '4px 12px',
+                  borderRadius: '20px',
+                  fontSize: '12px',
+                  backgroundColor: machine.is_active ? theme.success + '20' : theme.danger + '20',
+                  color: machine.is_active ? theme.success : theme.danger
+                }}>
+                  {machine.is_active ? 'Active' : 'Inactive'}
+                </span>
+              </div>
+              <p style={{ color: theme.textSecondary, margin: '0 0 16px 0' }}>
+                📍 {machine.location}
+              </p>
+
+              {/* Performance Stats */}
+              <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: theme.success }}>
+                    {machine.performing_count || 0}
+                  </div>
+                  <div style={{ fontSize: '12px', color: theme.textMuted }}>Performing</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold', color: theme.danger }}>
+                    {machine.not_performing_count || 0}
+                  </div>
+                  <div style={{ fontSize: '12px', color: theme.textMuted }}>Not Performing</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
+                    {machine.product_count || 0}
+                  </div>
+                  <div style={{ fontSize: '12px', color: theme.textMuted }}>Products</div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <Link to={`/vendor/machines/${machine.id}`} style={{ ...styles.button, flex: 1, textAlign: 'center', textDecoration: 'none', fontSize: '14px', padding: '10px' }}>
+                  Manage
+                </Link>
+                <button onClick={() => handleDownloadQR(machine.id)} style={{ ...styles.button, ...styles.buttonSecondary, fontSize: '14px', padding: '10px' }}>
+                  QR
                 </button>
               </div>
             </div>
           ))}
         </div>
+
+        {machines.length === 0 && (
+          <div style={{ ...styles.card, textAlign: 'center', padding: '48px' }}>
+            <p style={{ color: theme.textSecondary }}>No machines yet. Add your first vending machine above.</p>
+          </div>
+        )}
       </div>
 
       {/* Products Section */}
       <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2>Products ({products.length})</h2>
-          <button onClick={() => setShowProductForm(!showProductForm)} style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', cursor: 'pointer' }}>
-            {showProductForm ? 'Cancel' : 'Add Product'}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h2 style={{ margin: 0 }}>Product Library ({products.length})</h2>
+          <button onClick={() => setShowProductForm(!showProductForm)} style={{ ...styles.button, ...styles.buttonSuccess }}>
+            {showProductForm ? 'Cancel' : '+ Add Product'}
           </button>
         </div>
 
         {showProductForm && <ProductForm onSuccess={() => { setShowProductForm(false); loadData(); }} />}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '20px', marginTop: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px' }}>
           {products.map(product => (
-            <div key={product.id} style={{ border: '1px solid #ddd', padding: '15px', borderRadius: '5px' }}>
-              <h3>{product.product_name}</h3>
-              <p><strong>Price:</strong> ${product.price}</p>
-              <p><strong>Category:</strong> {product.category || 'N/A'}</p>
-              <p><strong>Status:</strong> {product.is_active ? '✅ Active' : '❌ Inactive'}</p>
+            <div key={product.id} style={styles.card}>
+              <h4 style={{ margin: '0 0 8px 0' }}>{product.product_name}</h4>
+              <p style={{ color: theme.success, fontWeight: 'bold', margin: '0 0 4px 0' }}>
+                ${parseFloat(product.price).toFixed(2)}
+              </p>
+              <p style={{ color: theme.textMuted, fontSize: '14px', margin: 0 }}>
+                {product.category || 'Uncategorized'}
+              </p>
             </div>
           ))}
         </div>
@@ -276,59 +943,55 @@ function VendorDashboard() {
 function MachineForm({ onSuccess }) {
   const [machineName, setMachineName] = useState('');
   const [location, setLocation] = useState('');
-  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const toast = useToast();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
+    setLoading(true);
     try {
-      console.log('Creating machine...', { machineName, location });
-      const response = await vendorAPI.createMachine({ machineName, location });
-      console.log('Machine created:', response.data);
+      await vendorAPI.createMachine({ machineName, location });
       setMachineName('');
       setLocation('');
-      alert('Machine created successfully!');
-      console.log('Calling onSuccess callback...');
-      // Add a small delay to ensure database transaction completes
-      setTimeout(() => {
-        console.log('Triggering onSuccess after delay...');
-        onSuccess();
-      }, 500);
+      toast.success('Machine created successfully');
+      setTimeout(onSuccess, 300);
     } catch (err) {
-      console.error('Error creating machine:', err);
-      const errorMsg = err.response?.data?.message || err.message || 'Failed to create machine';
-      setError(errorMsg);
-      alert('Error: ' + errorMsg);
+      toast.error(err.response?.data?.message || 'Failed to create machine');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} style={{ backgroundColor: '#f8f9fa', padding: '20px', marginTop: '10px', borderRadius: '5px' }}>
-      <h3>Add New Machine</h3>
-      <div style={{ marginBottom: '10px' }}>
-        <input
-          type="text"
-          placeholder="Machine Name"
-          value={machineName}
-          onChange={(e) => setMachineName(e.target.value)}
-          style={{ width: '100%', padding: '8px' }}
-          required
-        />
+    <form onSubmit={handleSubmit} style={{ ...styles.card, marginBottom: '20px' }}>
+      <h3 style={{ margin: '0 0 16px 0' }}>Add New Machine</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '16px', alignItems: 'end' }}>
+        <div>
+          <label style={styles.label}>Machine Name</label>
+          <input
+            type="text"
+            value={machineName}
+            onChange={(e) => setMachineName(e.target.value)}
+            style={styles.input}
+            placeholder="Office Building A"
+            required
+          />
+        </div>
+        <div>
+          <label style={styles.label}>Location</label>
+          <input
+            type="text"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            style={styles.input}
+            placeholder="123 Main St, Floor 2"
+            required
+          />
+        </div>
+        <button type="submit" style={styles.button} disabled={loading}>
+          {loading ? 'Creating...' : 'Create'}
+        </button>
       </div>
-      <div style={{ marginBottom: '10px' }}>
-        <input
-          type="text"
-          placeholder="Location"
-          value={location}
-          onChange={(e) => setLocation(e.target.value)}
-          style={{ width: '100%', padding: '8px' }}
-          required
-        />
-      </div>
-      {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
-      <button type="submit" style={{ padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer' }}>
-        Create Machine
-      </button>
     </form>
   );
 }
@@ -337,70 +1000,67 @@ function ProductForm({ onSuccess }) {
   const [productName, setProductName] = useState('');
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState('');
-  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const toast = useToast();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
+    setLoading(true);
     try {
-      console.log('Creating product...', { productName, price, category });
-      const response = await vendorAPI.createProduct({ productName, price: parseFloat(price), category });
-      console.log('Product created:', response.data);
+      await vendorAPI.createProduct({ productName, price: parseFloat(price), category });
       setProductName('');
       setPrice('');
       setCategory('');
-      alert('Product created successfully!');
-      console.log('Calling onSuccess callback for product...');
-      // Add a small delay to ensure database transaction completes
-      setTimeout(() => {
-        console.log('Triggering onSuccess after delay...');
-        onSuccess();
-      }, 500);
+      toast.success('Product created successfully');
+      setTimeout(onSuccess, 300);
     } catch (err) {
-      console.error('Error creating product:', err);
-      const errorMsg = err.response?.data?.message || err.message || 'Failed to create product';
-      setError(errorMsg);
-      alert('Error: ' + errorMsg);
+      toast.error(err.response?.data?.message || 'Failed to create product');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} style={{ backgroundColor: '#f8f9fa', padding: '20px', marginTop: '10px', borderRadius: '5px' }}>
-      <h3>Add New Product</h3>
-      <div style={{ marginBottom: '10px' }}>
-        <input
-          type="text"
-          placeholder="Product Name"
-          value={productName}
-          onChange={(e) => setProductName(e.target.value)}
-          style={{ width: '100%', padding: '8px' }}
-          required
-        />
+    <form onSubmit={handleSubmit} style={{ ...styles.card, marginBottom: '20px' }}>
+      <h3 style={{ margin: '0 0 16px 0' }}>Add New Product</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '16px', alignItems: 'end' }}>
+        <div>
+          <label style={styles.label}>Product Name</label>
+          <input
+            type="text"
+            value={productName}
+            onChange={(e) => setProductName(e.target.value)}
+            style={styles.input}
+            placeholder="Coca-Cola"
+            required
+          />
+        </div>
+        <div>
+          <label style={styles.label}>Price</label>
+          <input
+            type="number"
+            step="0.01"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            style={styles.input}
+            placeholder="1.50"
+            required
+          />
+        </div>
+        <div>
+          <label style={styles.label}>Category</label>
+          <input
+            type="text"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            style={styles.input}
+            placeholder="Beverages"
+          />
+        </div>
+        <button type="submit" style={styles.button} disabled={loading}>
+          {loading ? 'Creating...' : 'Create'}
+        </button>
       </div>
-      <div style={{ marginBottom: '10px' }}>
-        <input
-          type="number"
-          step="0.01"
-          placeholder="Price"
-          value={price}
-          onChange={(e) => setPrice(e.target.value)}
-          style={{ width: '100%', padding: '8px' }}
-          required
-        />
-      </div>
-      <div style={{ marginBottom: '10px' }}>
-        <input
-          type="text"
-          placeholder="Category (optional)"
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          style={{ width: '100%', padding: '8px' }}
-        />
-      </div>
-      {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
-      <button type="submit" style={{ padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer' }}>
-        Create Product
-      </button>
     </form>
   );
 }
@@ -410,82 +1070,68 @@ function MachineDetails() {
   const [machine, setMachine] = useState(null);
   const [inventory, setInventory] = useState([]);
   const [products, setProducts] = useState([]);
-  const [discounts, setDiscounts] = useState([]);
+  const [stats, setStats] = useState({});
   const [polls, setPolls] = useState([]);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
-  const [showDiscountForm, setShowDiscountForm] = useState(false);
   const [showPollForm, setShowPollForm] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState('');
-  const [stockQuantity, setStockQuantity] = useState('');
-  const [discountCode, setDiscountCode] = useState('');
-  const [discountProductId, setDiscountProductId] = useState('');
-  const [percentOff, setPercentOff] = useState('');
-  const [startsAt, setStartsAt] = useState('');
-  const [endsAt, setEndsAt] = useState('');
-  const [pollQuestion, setPollQuestion] = useState('');
-  const [pollOptions, setPollOptions] = useState([{ optionText: '', imageUrl: '' }]);
+  const [stockQuantity, setStockQuantity] = useState('10');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  // Redistribution state
+  const [showRedistribution, setShowRedistribution] = useState(false);
+  const [selectedProductForRedist, setSelectedProductForRedist] = useState(null);
+  const [redistributionTargets, setRedistributionTargets] = useState([]);
+  const [redistributionLoading, setRedistributionLoading] = useState(false);
+  const [transferQuantity, setTransferQuantity] = useState(1);
+  const [selectedTargetMachine, setSelectedTargetMachine] = useState(null);
+  // Notes state
+  const [notes, setNotes] = useState('');
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [notesChanged, setNotesChanged] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     loadMachineData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const loadMachineData = async () => {
     try {
       setLoading(true);
-      const [machineRes, inventoryRes, productsRes, discountsRes, pollsRes] = await Promise.allSettled([
+      const [machineRes, inventoryRes, productsRes, pollsRes] = await Promise.allSettled([
         vendorAPI.getMachine(id),
         vendorAPI.getMachineInventory(id),
         vendorAPI.getProducts(),
-        vendorAPI.getMachineDiscounts(id),
         vendorAPI.getMachinePolls(id)
       ]);
 
       if (machineRes.status === 'fulfilled') {
         const machineData = machineRes.value.data.data.machine;
         setMachine(machineData);
-
-        // Generate QR code
+        setNotes(machineData.notes || '');
+        setNotesChanged(false);
         if (machineData.qr_token) {
           const qrUrl = `${FRONTEND_URL}/customer/machine/${machineData.qr_token}`;
           const qrImage = await QRCode.toDataURL(qrUrl, { width: 300 });
           setQrCodeDataUrl(qrImage);
         }
-      } else {
-        console.error('Machine API failed:', machineRes.reason);
-        setError('Failed to load machine data');
       }
 
       if (inventoryRes.status === 'fulfilled') {
         setInventory(inventoryRes.value.data.data.inventory);
-      } else {
-        console.error('Inventory API failed:', inventoryRes.reason);
-        setError('Failed to load inventory');
+        setStats(inventoryRes.value.data.data.stats);
       }
 
       if (productsRes.status === 'fulfilled') {
         setProducts(productsRes.value.data.data.products);
-      } else {
-        console.error('Products API failed:', productsRes.reason);
-        setError('Failed to load products');
-      }
-
-      if (discountsRes.status === 'fulfilled') {
-        setDiscounts(discountsRes.value.data.data.discounts);
-      } else {
-        console.error('Discounts API failed:', discountsRes.reason);
       }
 
       if (pollsRes.status === 'fulfilled') {
         setPolls(pollsRes.value.data.data.polls || []);
-      } else {
-        console.error('Polls API failed:', pollsRes.reason);
       }
     } catch (err) {
-      console.error('Error loading machine data:', err);
-      setError('Failed to load machine data');
+      console.error('Error loading machine:', err);
     } finally {
       setLoading(false);
     }
@@ -493,478 +1139,773 @@ function MachineDetails() {
 
   const handleAddProduct = async (e) => {
     e.preventDefault();
-    setError('');
     try {
       await vendorAPI.addToInventory(id, {
         productId: parseInt(selectedProductId),
         stockQuantity: parseInt(stockQuantity)
       });
       setSelectedProductId('');
-      setStockQuantity('');
+      setStockQuantity('10');
       setShowAddForm(false);
+      toast.success('Product added to machine');
       loadMachineData();
-      alert('Product added to machine inventory!');
     } catch (err) {
-      console.error('Error adding product:', err);
-      const errorMsg = err.response?.data?.message || 'Failed to add product';
-      setError(errorMsg);
-      alert('Error: ' + errorMsg);
+      toast.error(err.response?.data?.message || 'Failed to add product');
     }
   };
 
-  const handleCreateDiscount = async (e) => {
-    e.preventDefault();
-    setError('');
+  const handleSetPerformance = async (inventoryId, isPerforming) => {
     try {
-      const payload = {
-        code: discountCode,
-        percentOff: parseFloat(percentOff)
-      };
-      if (discountProductId) payload.productId = parseInt(discountProductId);
-      if (startsAt) payload.startsAt = startsAt;
-      if (endsAt) payload.endsAt = endsAt;
-
-      await vendorAPI.createDiscount(id, payload);
-      setDiscountCode('');
-      setDiscountProductId('');
-      setPercentOff('');
-      setStartsAt('');
-      setEndsAt('');
-      setShowDiscountForm(false);
+      await vendorAPI.setPerformance(id, inventoryId, { isPerforming });
       loadMachineData();
-      alert('Discount code created successfully!');
     } catch (err) {
-      console.error('Error creating discount:', err);
-      const errorMsg = err.response?.data?.message || 'Failed to create discount';
-      setError(errorMsg);
-      alert('Error: ' + errorMsg);
+      toast.error(err.response?.data?.message || 'Failed to update performance');
     }
   };
 
-  const handleDeleteDiscount = async (discountId) => {
-    if (!window.confirm('Are you sure you want to delete this discount code?')) return;
+  const handleRemoveProduct = async (inventoryId) => {
+    if (!window.confirm('Remove this product from the machine?')) return;
     try {
-      await vendorAPI.deleteDiscount(id, discountId);
+      await vendorAPI.removeFromInventory(id, inventoryId);
+      toast.success('Product removed from machine');
       loadMachineData();
-      alert('Discount code deleted!');
     } catch (err) {
-      console.error('Error deleting discount:', err);
-      alert('Error: ' + (err.response?.data?.message || 'Failed to delete discount'));
+      toast.error(err.response?.data?.message || 'Failed to remove product');
     }
   };
 
-  const handleCreatePoll = async (e) => {
-    e.preventDefault();
-    setError('');
+  const handleSaveNotes = async () => {
+    setSavingNotes(true);
     try {
-      const validOptions = pollOptions.filter(opt => opt.optionText.trim() !== '');
-      if (validOptions.length < 2) {
-        setError('Please provide at least 2 options');
-        return;
-      }
-
-      await vendorAPI.createPoll(id, {
-        question: pollQuestion,
-        options: validOptions.map(opt => ({
-          text: opt.optionText,
-          imageUrl: opt.imageUrl || null
-        }))
-      });
-
-      setPollQuestion('');
-      setPollOptions([{ optionText: '', imageUrl: '' }]);
-      setShowPollForm(false);
-      loadMachineData();
-      alert('Poll created successfully!');
+      await vendorAPI.updateMachineNotes(id, notes);
+      setNotesChanged(false);
+      toast.success('Notes saved');
     } catch (err) {
-      console.error('Error creating poll:', err);
-      const errorMsg = err.response?.data?.message || 'Failed to create poll';
-      setError(errorMsg);
-      alert('Error: ' + errorMsg);
+      toast.error(err.response?.data?.message || 'Failed to save notes');
+    } finally {
+      setSavingNotes(false);
     }
   };
 
-  const handleAddPollOption = () => {
-    setPollOptions([...pollOptions, { optionText: '', imageUrl: '' }]);
+  const handleNotesChange = (e) => {
+    setNotes(e.target.value);
+    setNotesChanged(true);
   };
 
-  const handleRemovePollOption = (index) => {
-    if (pollOptions.length <= 1) return;
-    setPollOptions(pollOptions.filter((_, i) => i !== index));
-  };
-
-  const handlePollOptionChange = (index, field, value) => {
-    const updated = [...pollOptions];
-    updated[index][field] = value;
-    setPollOptions(updated);
+  const handleSetExpiration = async (inventoryId, date) => {
+    try {
+      await vendorAPI.updateExpirationDate(id, inventoryId, date);
+      toast.success('Expiration date updated');
+      loadMachineData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update expiration date');
+    }
   };
 
   const handleCopyLink = () => {
     if (!machine?.qr_token) return;
     const qrUrl = `${FRONTEND_URL}/customer/machine/${machine.qr_token}`;
-    navigator.clipboard.writeText(qrUrl).then(() => {
-      alert('Link copied to clipboard!');
-    }).catch(err => {
-      console.error('Failed to copy:', err);
-      alert('Failed to copy link');
-    });
+    navigator.clipboard.writeText(qrUrl);
+    toast.success('Link copied to clipboard');
   };
 
   const handleDownloadQRPDF = () => {
     if (!machine?.qr_token || !qrCodeDataUrl) return;
+    const pdf = new jsPDF();
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    pdf.setFontSize(18);
+    pdf.text(machine.machine_name || 'Machine QR Code', pageWidth / 2, 20, { align: 'center' });
+    pdf.setFontSize(12);
+    pdf.text('Scan to vote on products', pageWidth / 2, 35, { align: 'center' });
+    pdf.addImage(qrCodeDataUrl, 'PNG', (pageWidth - 80) / 2, 50, 80, 80);
+    pdf.save(`machine-${id}-qr.pdf`);
+  };
 
+  // Redistribution handlers
+  const handleSelectProductForRedist = async (item) => {
+    setSelectedProductForRedist(item);
+    setRedistributionLoading(true);
+    setTransferQuantity(1);
+    setSelectedTargetMachine(null);
     try {
-      const pdf = new jsPDF();
-      const pageWidth = pdf.internal.pageSize.getWidth();
-
-      pdf.setFontSize(18);
-      pdf.text(machine.machine_name || 'Machine QR Code', pageWidth / 2, 20, { align: 'center' });
-
-      pdf.setFontSize(12);
-      pdf.text('Scan this QR code to access discounts and polls', pageWidth / 2, 35, { align: 'center' });
-
-      pdf.addImage(qrCodeDataUrl, 'PNG', (pageWidth - 80) / 2, 50, 80, 80);
-
-      pdf.setFontSize(10);
-      pdf.setTextColor(100);
-      pdf.text(`Machine ID: ${id}`, pageWidth / 2, 145, { align: 'center' });
-
-      const qrUrl = `${FRONTEND_URL}/customer/machine/${machine.qr_token}`;
-      pdf.setFontSize(8);
-      pdf.text(qrUrl, pageWidth / 2, 155, { align: 'center' });
-
-      pdf.save(`machine-${id}-qr.pdf`);
+      const response = await vendorAPI.getRedistributionTargets(id, item.product_id);
+      setRedistributionTargets(response.data?.data?.targetMachines || []);
     } catch (err) {
-      console.error('Error generating QR PDF:', err);
-      alert('Failed to generate QR PDF');
+      console.error('Error loading redistribution targets:', err);
+      setRedistributionTargets([]);
+    } finally {
+      setRedistributionLoading(false);
     }
   };
 
-  if (loading) return <div style={{ padding: '20px' }}>Loading...</div>;
+  const handleExecuteRedistribution = async () => {
+    if (!selectedProductForRedist || !selectedTargetMachine || transferQuantity < 1) return;
+
+    if (transferQuantity > selectedProductForRedist.current_stock) {
+      toast.error(`Cannot transfer more than available stock (${selectedProductForRedist.current_stock})`);
+      return;
+    }
+
+    try {
+      setRedistributionLoading(true);
+      await vendorAPI.executeRedistribution({
+        sourceMachineId: parseInt(id),
+        targetMachineId: selectedTargetMachine.machine_id,
+        productId: selectedProductForRedist.product_id,
+        quantity: transferQuantity,
+        reason: 'Product redistribution to optimize performance'
+      });
+      toast.success(`Transferred ${transferQuantity} units to ${selectedTargetMachine.machine_name}`);
+      setSelectedProductForRedist(null);
+      setSelectedTargetMachine(null);
+      setTransferQuantity(1);
+      setShowRedistribution(false);
+      loadMachineData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to execute redistribution');
+    } finally {
+      setRedistributionLoading(false);
+    }
+  };
+
+  const handleCancelRedistribution = () => {
+    setSelectedProductForRedist(null);
+    setSelectedTargetMachine(null);
+    setTransferQuantity(1);
+    setRedistributionTargets([]);
+  };
+
+  if (loading) {
+    return <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><p>Loading...</p></div>;
+  }
 
   return (
-    <div style={{ padding: '20px' }}>
-      <Link to="/vendor/dashboard" style={{ color: '#007bff', marginBottom: '20px', display: 'inline-block' }}>← Back to Dashboard</Link>
+    <div style={styles.page}>
+      <Link to="/vendor/dashboard" style={{ ...styles.link, display: 'inline-block', marginBottom: '24px' }}>
+        ← Back to Dashboard
+      </Link>
 
-      {machine && (
-        <div style={{ marginBottom: '30px' }}>
-          <h2>{machine.machine_name}</h2>
-          <p><strong>Location:</strong> {machine.location}</p>
-          <p><strong>Status:</strong> {machine.is_active ? '✅ Active' : '❌ Inactive'}</p>
+      {/* Machine Header */}
+      <div style={{ ...styles.card, marginBottom: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+          <div>
+            <h1 style={{ margin: '0 0 8px 0' }}>{machine?.machine_name}</h1>
+            <p style={{ color: theme.textSecondary, margin: 0 }}>📍 {machine?.location}</p>
+          </div>
+          <span style={{
+            padding: '6px 16px',
+            borderRadius: '20px',
+            backgroundColor: machine?.is_active ? theme.success + '20' : theme.danger + '20',
+            color: machine?.is_active ? theme.success : theme.danger
+          }}>
+            {machine?.is_active ? 'Active' : 'Inactive'}
+          </span>
         </div>
-      )}
 
-      <div style={{ marginBottom: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3>Inventory ({inventory.length} products)</h3>
-          <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', cursor: 'pointer' }}
-          >
-            {showAddForm ? 'Cancel' : 'Assign Product'}
+        {/* Stats */}
+        <div style={{ display: 'flex', gap: '32px', marginTop: '24px', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: '32px', fontWeight: 'bold' }}>{stats.total || 0}</div>
+            <div style={{ color: theme.textMuted, fontSize: '14px' }}>Total Products</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.success }}>{stats.performing || 0}</div>
+            <div style={{ color: theme.textMuted, fontSize: '14px' }}>Performing Well</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.danger }}>{stats.notPerforming || 0}</div>
+            <div style={{ color: theme.textMuted, fontSize: '14px' }}>Not Performing</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.textMuted }}>{stats.unmarked || 0}</div>
+            <div style={{ color: theme.textMuted, fontSize: '14px' }}>Not Marked</div>
+          </div>
+          {stats.expiringSoon > 0 && (
+            <div>
+              <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.warning }}>{stats.expiringSoon}</div>
+              <div style={{ color: theme.textMuted, fontSize: '14px' }}>Expiring Soon</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Machine Notes Section */}
+      <div style={{ ...styles.card, marginBottom: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <h3 style={{ margin: 0 }}>📝 Machine Notes</h3>
+          {notesChanged && (
+            <button
+              onClick={handleSaveNotes}
+              disabled={savingNotes}
+              style={{ ...styles.button, padding: '6px 16px', fontSize: '14px' }}
+            >
+              {savingNotes ? 'Saving...' : 'Save Notes'}
+            </button>
+          )}
+        </div>
+        <textarea
+          value={notes}
+          onChange={handleNotesChange}
+          placeholder="Add notes about this machine (e.g., access instructions, contact info, special requirements...)"
+          style={{
+            ...styles.input,
+            width: '100%',
+            minHeight: '80px',
+            resize: 'vertical',
+            fontFamily: 'inherit'
+          }}
+        />
+        <p style={{ color: theme.textMuted, fontSize: '12px', margin: '8px 0 0 0' }}>
+          Notes are only visible to you. Use them to remember access codes, contact info, or machine-specific details.
+        </p>
+      </div>
+
+      {/* Inventory Section */}
+      <div style={{ marginBottom: '32px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h2 style={{ margin: 0 }}>Planogram ({inventory.length}/40 products)</h2>
+          <button onClick={() => setShowAddForm(!showAddForm)} style={{ ...styles.button, ...styles.buttonSuccess }}>
+            {showAddForm ? 'Cancel' : '+ Add Product'}
           </button>
         </div>
 
         {showAddForm && (
-          <form onSubmit={handleAddProduct} style={{ backgroundColor: '#f8f9fa', padding: '20px', marginTop: '10px', borderRadius: '5px' }}>
-            <h4>Assign Product to Machine</h4>
-            <div style={{ marginBottom: '10px' }}>
-              <select
-                value={selectedProductId}
-                onChange={(e) => setSelectedProductId(e.target.value)}
-                style={{ width: '100%', padding: '8px' }}
-                required
-              >
-                <option value="">Select a product...</option>
-                {products.map(product => (
-                  <option key={product.id} value={product.id}>
-                    {product.product_name} - ${product.price}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div style={{ marginBottom: '10px' }}>
-              <input
-                type="number"
-                placeholder="Stock Quantity"
-                value={stockQuantity}
-                onChange={(e) => setStockQuantity(e.target.value)}
-                style={{ width: '100%', padding: '8px' }}
-                min="0"
-                required
-              />
-            </div>
-            {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
-            <button type="submit" style={{ padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer' }}>
-              Add to Inventory
-            </button>
-          </form>
-        )}
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '20px' }}>
-        {inventory.length === 0 ? (
-          <p>No products assigned to this machine yet.</p>
-        ) : (
-          inventory.map(item => (
-            <div key={item.id} style={{ border: '1px solid #ddd', padding: '15px', borderRadius: '5px' }}>
-              <h4>{item.product_name}</h4>
-              <p><strong>Price:</strong> ${item.price}</p>
-              <p><strong>Stock:</strong> {item.current_stock}</p>
-              {item.description && <p style={{ fontSize: '14px', color: '#666' }}>{item.description}</p>}
-            </div>
-          ))
-        )}
-      </div>
-
-      {/* Discount Codes Section */}
-      <div style={{ marginTop: '40px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3>Discount Codes ({discounts.filter(d => d.is_active).length} active)</h3>
-          <button
-            onClick={() => setShowDiscountForm(!showDiscountForm)}
-            style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', cursor: 'pointer' }}
-          >
-            {showDiscountForm ? 'Cancel' : 'Create Discount Code'}
-          </button>
-        </div>
-
-        {showDiscountForm && (
-          <form onSubmit={handleCreateDiscount} style={{ backgroundColor: '#f8f9fa', padding: '20px', marginTop: '10px', borderRadius: '5px' }}>
-            <h4>Create Discount Code</h4>
-            <div style={{ marginBottom: '10px' }}>
-              <input
-                type="text"
-                placeholder="Discount Code (e.g., SAVE15)"
-                value={discountCode}
-                onChange={(e) => setDiscountCode(e.target.value)}
-                style={{ width: '100%', padding: '8px' }}
-                required
-              />
-            </div>
-            <div style={{ marginBottom: '10px' }}>
-              <select
-                value={discountProductId}
-                onChange={(e) => setDiscountProductId(e.target.value)}
-                style={{ width: '100%', padding: '8px' }}
-              >
-                <option value="">All products</option>
-                {products.map(product => (
-                  <option key={product.id} value={product.id}>
-                    {product.product_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div style={{ marginBottom: '10px' }}>
-              <input
-                type="number"
-                placeholder="Percent Off (0-100)"
-                value={percentOff}
-                onChange={(e) => setPercentOff(e.target.value)}
-                style={{ width: '100%', padding: '8px' }}
-                min="0"
-                max="100"
-                step="0.01"
-                required
-              />
-            </div>
-            <div style={{ marginBottom: '10px' }}>
-              <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>Starts At (optional):</label>
-              <input
-                type="datetime-local"
-                value={startsAt}
-                onChange={(e) => setStartsAt(e.target.value)}
-                style={{ width: '100%', padding: '8px' }}
-              />
-            </div>
-            <div style={{ marginBottom: '10px' }}>
-              <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>Ends At (optional):</label>
-              <input
-                type="datetime-local"
-                value={endsAt}
-                onChange={(e) => setEndsAt(e.target.value)}
-                style={{ width: '100%', padding: '8px' }}
-              />
-            </div>
-            {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
-            <button type="submit" style={{ padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer' }}>
-              Create Discount
-            </button>
-          </form>
-        )}
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px', marginTop: '20px' }}>
-          {discounts.length === 0 ? (
-            <p>No discount codes created yet.</p>
-          ) : (
-            discounts.map(discount => (
-              <div key={discount.id} style={{ border: '1px solid #ddd', padding: '15px', borderRadius: '5px', backgroundColor: discount.is_active ? '#fff' : '#f8f9fa' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                  <h4 style={{ margin: '0 0 10px 0' }}>{discount.code}</h4>
-                  <button
-                    onClick={() => handleDeleteDiscount(discount.id)}
-                    style={{ padding: '5px 10px', backgroundColor: '#dc3545', color: 'white', border: 'none', cursor: 'pointer', fontSize: '12px' }}
-                  >
-                    Delete
-                  </button>
-                </div>
-                <p><strong>Product:</strong> {discount.product_name || 'All products'}</p>
-                <p><strong>Discount:</strong> {discount.discount_value}% off</p>
-                {discount.valid_from && <p style={{ fontSize: '14px', color: '#666' }}><strong>Starts:</strong> {new Date(discount.valid_from).toLocaleString()}</p>}
-                {discount.valid_until && <p style={{ fontSize: '14px', color: '#666' }}><strong>Ends:</strong> {new Date(discount.valid_until).toLocaleString()}</p>}
-                {discount.max_uses && <p style={{ fontSize: '14px', color: '#666' }}><strong>Uses:</strong> {discount.current_uses}/{discount.max_uses}</p>}
-                <p style={{ fontSize: '14px', marginTop: '10px' }}>
-                  <span style={{ padding: '3px 8px', borderRadius: '3px', backgroundColor: discount.is_active ? '#28a745' : '#6c757d', color: 'white', fontSize: '12px' }}>
-                    {discount.is_active ? 'Active' : 'Inactive'}
-                  </span>
-                </p>
+          <form onSubmit={handleAddProduct} style={{ ...styles.card, marginBottom: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '16px', alignItems: 'end' }}>
+              <div>
+                <label style={styles.label}>Product</label>
+                <select
+                  value={selectedProductId}
+                  onChange={(e) => setSelectedProductId(e.target.value)}
+                  style={styles.input}
+                  required
+                >
+                  <option value="">Select product...</option>
+                  {products.filter(p => !inventory.find(i => i.product_id === p.id)).map(product => (
+                    <option key={product.id} value={product.id}>
+                      {product.product_name} - ${product.price}
+                    </option>
+                  ))}
+                </select>
               </div>
-            ))
-          )}
+              <div>
+                <label style={styles.label}>Initial Stock</label>
+                <input
+                  type="number"
+                  value={stockQuantity}
+                  onChange={(e) => setStockQuantity(e.target.value)}
+                  style={styles.input}
+                  min="0"
+                  required
+                />
+              </div>
+              <button type="submit" style={styles.button}>Add</button>
+            </div>
+          </form>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
+          {inventory.map(item => (
+            <div key={item.id} style={{
+              ...styles.card,
+              borderLeft: `4px solid ${item.is_performing === true ? theme.success : item.is_performing === false ? theme.danger : theme.border}`
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
+                <div>
+                  <h4 style={{ margin: '0 0 4px 0' }}>{item.product_name}</h4>
+                  <p style={{ color: theme.textMuted, margin: 0, fontSize: '14px' }}>
+                    ${parseFloat(item.price).toFixed(2)} • Stock: {item.current_stock}
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleRemoveProduct(item.id)}
+                  style={{ background: 'none', border: 'none', color: theme.danger, cursor: 'pointer', fontSize: '18px' }}
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Performance Toggle */}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => handleSetPerformance(item.id, true)}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontWeight: '600',
+                    backgroundColor: item.is_performing === true ? theme.success : theme.surfaceHover,
+                    color: item.is_performing === true ? 'white' : theme.textSecondary,
+                  }}
+                >
+                  ✓ Yes
+                </button>
+                <button
+                  onClick={() => handleSetPerformance(item.id, false)}
+                  style={{
+                    flex: 1,
+                    padding: '10px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontWeight: '600',
+                    backgroundColor: item.is_performing === false ? theme.danger : theme.surfaceHover,
+                    color: item.is_performing === false ? 'white' : theme.textSecondary,
+                  }}
+                >
+                  ✗ No
+                </button>
+              </div>
+
+              {/* Expiration Date */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+                <span style={{ fontSize: '12px', color: theme.textMuted }}>Expires:</span>
+                <input
+                  type="date"
+                  defaultValue={item.expiration_date?.split('T')[0] || ''}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      handleSetExpiration(item.id, e.target.value);
+                    }
+                  }}
+                  style={{
+                    ...styles.input,
+                    padding: '4px 8px',
+                    fontSize: '12px',
+                    flex: 1,
+                  }}
+                />
+                {item.expiration_date && (() => {
+                  const daysLeft = Math.ceil((new Date(item.expiration_date) - new Date()) / (1000 * 60 * 60 * 24));
+                  if (daysLeft <= 7) {
+                    return (
+                      <span style={{
+                        fontSize: '11px',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        backgroundColor: daysLeft <= 3 ? theme.danger + '20' : theme.warning + '20',
+                        color: daysLeft <= 3 ? theme.danger : theme.warning,
+                        fontWeight: '600',
+                      }}>
+                        {daysLeft <= 0 ? 'EXPIRED' : `${daysLeft}d left`}
+                      </span>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+
+              {item.performance_marked_at && (
+                <p style={{ color: theme.textMuted, fontSize: '12px', margin: '8px 0 0 0' }}>
+                  Marked: {new Date(item.performance_marked_at).toLocaleDateString()}
+                </p>
+              )}
+            </div>
+          ))}
         </div>
+
+        {inventory.length === 0 && (
+          <div style={{ ...styles.card, textAlign: 'center', padding: '48px' }}>
+            <p style={{ color: theme.textSecondary }}>No products in this machine yet.</p>
+          </div>
+        )}
+
+        {/* Redistribute Button */}
+        {inventory.length > 0 && (
+          <button
+            onClick={() => setShowRedistribution(!showRedistribution)}
+            style={{ ...styles.button, marginTop: '16px', backgroundColor: showRedistribution ? theme.warning : theme.primary }}
+          >
+            {showRedistribution ? 'Close Redistribution' : 'Redistribute Products'}
+          </button>
+        )}
       </div>
 
-      {/* Polls Section */}
-      <div style={{ marginTop: '40px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3>Product Polls ({polls.filter(p => p.is_active).length} active)</h3>
-          <button
-            onClick={() => setShowPollForm(!showPollForm)}
-            style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', cursor: 'pointer' }}
-          >
-            {showPollForm ? 'Cancel' : 'Create Poll'}
-          </button>
-        </div>
+      {/* Product Redistribution Section */}
+      {showRedistribution && inventory.length > 0 && (
+        <div style={{ marginBottom: '32px' }}>
+          <h2 style={{ marginBottom: '16px' }}>Product Redistribution</h2>
+          <p style={{ color: theme.textSecondary, marginBottom: '16px' }}>
+            Move products to machines where they perform better to reduce spoilage.
+          </p>
 
-        {showPollForm && (
-          <form onSubmit={handleCreatePoll} style={{ backgroundColor: '#f8f9fa', padding: '20px', marginTop: '10px', borderRadius: '5px' }}>
-            <h4>Create Product Poll</h4>
-            <div style={{ marginBottom: '15px' }}>
-              <input
-                type="text"
-                placeholder="Poll Question (e.g., 'What products should we add?')"
-                value={pollQuestion}
-                onChange={(e) => setPollQuestion(e.target.value)}
-                style={{ width: '100%', padding: '8px' }}
-                required
-              />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+            {/* Source Products (Left Panel) */}
+            <div>
+              <h3 style={{ marginBottom: '12px', color: theme.textSecondary }}>Select Product to Move</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '400px', overflowY: 'auto' }}>
+                {inventory.filter(item => item.current_stock > 0).map(item => (
+                  <div
+                    key={item.id}
+                    onClick={() => handleSelectProductForRedist(item)}
+                    style={{
+                      ...styles.card,
+                      cursor: 'pointer',
+                      borderLeft: `4px solid ${selectedProductForRedist?.id === item.id ? theme.primary : 'transparent'}`,
+                      backgroundColor: selectedProductForRedist?.id === item.id ? theme.surfaceHover : theme.surface,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <p style={{ margin: 0, fontWeight: '600' }}>{item.product_name}</p>
+                        <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: theme.textMuted }}>
+                          Stock: {item.current_stock} • {item.is_performing === true ? 'Performing' : item.is_performing === false ? 'Not Performing' : 'Unmarked'}
+                        </p>
+                      </div>
+                      {selectedProductForRedist?.id === item.id && (
+                        <span style={{ color: theme.primary, fontSize: '20px' }}>→</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <h5>Poll Options:</h5>
-            {pollOptions.map((option, index) => (
-              <div key={index} style={{ marginBottom: '15px', padding: '15px', backgroundColor: 'white', borderRadius: '5px', border: '1px solid #ddd' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  <strong>Option {index + 1}</strong>
-                  {pollOptions.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => handleRemovePollOption(index)}
-                      style={{ padding: '5px 10px', backgroundColor: '#dc3545', color: 'white', border: 'none', cursor: 'pointer', fontSize: '12px', borderRadius: '3px' }}
-                    >
-                      Remove
-                    </button>
+            {/* Target Machines (Right Panel) */}
+            <div>
+              <h3 style={{ marginBottom: '12px', color: theme.textSecondary }}>
+                {selectedProductForRedist ? `Send "${selectedProductForRedist.product_name}" to:` : 'Select a product first'}
+              </h3>
+
+              {redistributionLoading ? (
+                <div style={{ ...styles.card, textAlign: 'center', padding: '24px' }}>
+                  <p style={{ color: theme.textSecondary }}>Loading target machines...</p>
+                </div>
+              ) : selectedProductForRedist ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '400px', overflowY: 'auto' }}>
+                  {redistributionTargets.length > 0 ? (
+                    redistributionTargets.map(target => (
+                      <div
+                        key={target.machine_id}
+                        onClick={() => setSelectedTargetMachine(target)}
+                        style={{
+                          ...styles.card,
+                          cursor: 'pointer',
+                          borderLeft: `4px solid ${selectedTargetMachine?.machine_id === target.machine_id ? theme.success : target.is_performing ? theme.success + '50' : 'transparent'}`,
+                          backgroundColor: selectedTargetMachine?.machine_id === target.machine_id ? theme.surfaceHover : theme.surface,
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <p style={{ margin: 0, fontWeight: '600' }}>{target.machine_name}</p>
+                            <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: theme.textMuted }}>
+                              {target.location}
+                            </p>
+                            <p style={{ margin: '4px 0 0 0', fontSize: '12px' }}>
+                              {target.has_product ? (
+                                <span>
+                                  Stock: {target.current_stock} •{' '}
+                                  <span style={{ color: target.is_performing ? theme.success : target.is_performing === false ? theme.danger : theme.textMuted }}>
+                                    {target.is_performing ? 'Performing' : target.is_performing === false ? 'Not Performing' : 'Unmarked'}
+                                  </span>
+                                </span>
+                              ) : (
+                                <span style={{ color: theme.warning }}>Product not in this machine yet</span>
+                              )}
+                            </p>
+                          </div>
+                          {target.is_performing && <span style={{ color: theme.success, fontSize: '16px' }}>★</span>}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ ...styles.card, textAlign: 'center', padding: '24px' }}>
+                      <p style={{ color: theme.textSecondary }}>No other machines available for redistribution.</p>
+                    </div>
                   )}
                 </div>
-                <div style={{ marginBottom: '10px' }}>
-                  <input
-                    type="text"
-                    placeholder="Option text (e.g., 'Honey Buns')"
-                    value={option.optionText}
-                    onChange={(e) => handlePollOptionChange(index, 'optionText', e.target.value)}
-                    style={{ width: '100%', padding: '8px' }}
-                    required
-                  />
+              ) : (
+                <div style={{ ...styles.card, textAlign: 'center', padding: '24px' }}>
+                  <p style={{ color: theme.textSecondary }}>Click on a product to see available target machines.</p>
                 </div>
-                <div>
-                  <input
-                    type="url"
-                    placeholder="Image URL (optional)"
-                    value={option.imageUrl}
-                    onChange={(e) => handlePollOptionChange(index, 'imageUrl', e.target.value)}
-                    style={{ width: '100%', padding: '8px' }}
-                  />
+              )}
+
+              {/* Transfer Controls */}
+              {selectedProductForRedist && selectedTargetMachine && (
+                <div style={{ ...styles.card, marginTop: '16px' }}>
+                  <h4 style={{ margin: '0 0 12px 0' }}>Transfer Details</h4>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
+                    <label style={{ color: theme.textSecondary }}>Quantity:</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max={selectedProductForRedist.current_stock}
+                      value={transferQuantity}
+                      onChange={(e) => setTransferQuantity(Math.min(parseInt(e.target.value) || 1, selectedProductForRedist.current_stock))}
+                      style={{ ...styles.input, width: '80px' }}
+                    />
+                    <span style={{ color: theme.textMuted, fontSize: '14px' }}>
+                      of {selectedProductForRedist.current_stock} available
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <button
+                      onClick={handleExecuteRedistribution}
+                      disabled={redistributionLoading}
+                      style={{ ...styles.button, ...styles.buttonSuccess, flex: 1 }}
+                    >
+                      {redistributionLoading ? 'Transferring...' : `Transfer ${transferQuantity} units`}
+                    </button>
+                    <button
+                      onClick={handleCancelRedistribution}
+                      style={{ ...styles.button, backgroundColor: theme.surfaceHover }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
-
-            <button
-              type="button"
-              onClick={handleAddPollOption}
-              style={{ padding: '10px 20px', backgroundColor: '#6c757d', color: 'white', border: 'none', cursor: 'pointer', marginBottom: '15px', borderRadius: '5px' }}
-            >
-              + Add Option
-            </button>
-
-            {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
-            <div>
-              <button type="submit" style={{ padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer', borderRadius: '5px' }}>
-                Create Poll
-              </button>
+              )}
             </div>
-          </form>
-        )}
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px', marginTop: '20px' }}>
-          {polls.length === 0 ? (
-            <p>No polls created yet.</p>
-          ) : (
-            polls.map(poll => (
-              <div key={poll.id} style={{ border: '1px solid #ddd', padding: '15px', borderRadius: '5px', backgroundColor: poll.is_active ? '#fff' : '#f8f9fa' }}>
-                <h4 style={{ margin: '0 0 10px 0' }}>{poll.poll_question}</h4>
-                <p style={{ fontSize: '14px', color: '#666', marginBottom: '10px' }}>
-                  <strong>Options:</strong> {poll.option_count || 0}
-                </p>
-                <p style={{ fontSize: '14px', marginBottom: '10px' }}>
-                  <span style={{ padding: '3px 8px', borderRadius: '3px', backgroundColor: poll.is_active ? '#28a745' : '#6c757d', color: 'white', fontSize: '12px' }}>
-                    {poll.is_active ? 'Active' : 'Inactive'}
-                  </span>
-                </p>
-                <Link
-                  to={`/vendor/polls/${poll.id}/results`}
-                  style={{ color: '#007bff', fontSize: '14px', textDecoration: 'underline' }}
-                >
-                  View Results
-                </Link>
-              </div>
-            ))
-          )}
+          </div>
         </div>
+      )}
+
+      {/* Swipe Poll Section */}
+      <div style={{ marginBottom: '32px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h2 style={{ margin: 0 }}>Customer Swipe Polls</h2>
+          <button onClick={() => setShowPollForm(!showPollForm)} style={{ ...styles.button, ...styles.buttonSuccess }}>
+            {showPollForm ? 'Cancel' : '+ Create Poll'}
+          </button>
+        </div>
+
+        {showPollForm && <SwipePollForm machineId={id} onSuccess={() => { setShowPollForm(false); loadMachineData(); }} />}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+          {polls.map(poll => (
+            <div key={poll.id} style={styles.card}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
+                <h4 style={{ margin: 0 }}>{poll.poll_question}</h4>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {/* Poll Type Badge */}
+                  <span style={{
+                    padding: '4px 10px',
+                    borderRadius: '12px',
+                    fontSize: '11px',
+                    backgroundColor: poll.pollType === 'discovery' ? theme.secondary + '20' : theme.primary + '20',
+                    color: poll.pollType === 'discovery' ? theme.secondary : theme.primary
+                  }}>
+                    {poll.pollType === 'discovery' ? 'Discovery' : 'Performance'}
+                  </span>
+                  {/* Auto-generated indicator */}
+                  {poll.isAutoGenerated && (
+                    <span style={{
+                      padding: '4px 10px',
+                      borderRadius: '12px',
+                      fontSize: '11px',
+                      backgroundColor: theme.warning + '20',
+                      color: theme.warning
+                    }}>
+                      Auto
+                    </span>
+                  )}
+                  {/* Active Status */}
+                  <span style={{
+                    padding: '4px 10px',
+                    borderRadius: '12px',
+                    fontSize: '12px',
+                    backgroundColor: poll.is_active ? theme.success + '20' : theme.surfaceHover,
+                    color: poll.is_active ? theme.success : theme.textMuted
+                  }}>
+                    {poll.is_active ? 'Active' : 'Closed'}
+                  </span>
+                </div>
+              </div>
+              <p style={{ color: theme.textMuted, fontSize: '14px', margin: '0 0 12px 0' }}>
+                {poll.product_count || 0} products • {poll.total_votes || 0} votes
+              </p>
+              <Link to={`/vendor/polls/${poll.id}/results`} style={{ ...styles.button, display: 'block', textAlign: 'center', textDecoration: 'none', fontSize: '14px', padding: '10px' }}>
+                View Results
+              </Link>
+            </div>
+          ))}
+        </div>
+
+        {polls.length === 0 && (
+          <div style={{ ...styles.card, textAlign: 'center', padding: '32px' }}>
+            <p style={{ color: theme.textSecondary }}>No polls created yet. Create one to get customer feedback!</p>
+          </div>
+        )}
       </div>
 
-      {/* Machine QR Code Section */}
-      <div style={{ marginTop: '40px' }}>
-        <h3>Machine QR Code</h3>
+      {/* QR Code Section */}
+      <div style={styles.card}>
+        <h2 style={{ margin: '0 0 16px 0' }}>Machine QR Code</h2>
         {qrCodeDataUrl ? (
-          <div style={{ backgroundColor: '#f8f9fa', padding: '20px', borderRadius: '5px', border: '1px solid #ddd' }}>
-            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-              <img src={qrCodeDataUrl} alt="Machine QR Code" style={{ maxWidth: '250px', border: '1px solid #ddd', borderRadius: '5px' }} />
-            </div>
-            <p style={{ marginBottom: '15px', color: '#666', textAlign: 'center', fontSize: '14px' }}>
-              Customers scan this QR code to access this machine's discounts and polls
-            </p>
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-              <button
-                onClick={handleCopyLink}
-                style={{ padding: '10px 20px', backgroundColor: '#6c757d', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}
-              >
-                Copy Link
-              </button>
-              <button
-                onClick={handleDownloadQRPDF}
-                style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}
-              >
-                Download PDF
-              </button>
+          <div style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
+            <img src={qrCodeDataUrl} alt="QR Code" style={{ width: '150px', borderRadius: '8px' }} />
+            <div>
+              <p style={{ color: theme.textSecondary, margin: '0 0 16px 0' }}>
+                Customers scan this to vote on potential new products
+              </p>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={handleCopyLink} style={{ ...styles.button, ...styles.buttonSecondary }}>
+                  Copy Link
+                </button>
+                <button onClick={handleDownloadQRPDF} style={styles.button}>
+                  Download PDF
+                </button>
+              </div>
             </div>
           </div>
         ) : (
-          <div style={{ backgroundColor: '#fff3cd', padding: '20px', borderRadius: '5px', border: '1px solid #ffc107' }}>
-            <p style={{ margin: 0, color: '#856404' }}>Loading QR code...</p>
-          </div>
+          <p style={{ color: theme.textMuted }}>Loading QR code...</p>
         )}
       </div>
     </div>
+  );
+}
+
+function SwipePollForm({ machineId, onSuccess }) {
+  const [pollType, setPollType] = useState('performance');
+  const [question, setQuestion] = useState('Which products would you like to see more of?');
+  const [products, setProducts] = useState([{ name: '', imageUrl: '' }, { name: '', imageUrl: '' }]);
+  const [loading, setLoading] = useState(false);
+  const toast = useToast();
+
+  const handlePollTypeChange = (type) => {
+    setPollType(type);
+    if (type === 'discovery') {
+      setQuestion('Would you be interested in these new products?');
+    } else {
+      setQuestion('Which products would you like to see more of?');
+    }
+  };
+
+  const handleAddProduct = () => {
+    if (products.length < 20) {
+      setProducts([...products, { name: '', imageUrl: '' }]);
+    }
+  };
+
+  const handleRemoveProduct = (index) => {
+    if (products.length > 2) {
+      setProducts(products.filter((_, i) => i !== index));
+    }
+  };
+
+  const handleProductChange = (index, field, value) => {
+    const updated = [...products];
+    updated[index][field] = value;
+    setProducts(updated);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const validProducts = products.filter(p => p.name.trim());
+    if (validProducts.length < 2) {
+      toast.warning('Please add at least 2 products');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await vendorAPI.createPoll(machineId, { question, pollType, products: validProducts });
+      toast.success(pollType === 'discovery'
+        ? 'Discovery poll created - gauge interest in new products!'
+        : 'Poll created successfully');
+      onSuccess();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to create poll');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} style={{ ...styles.card, marginBottom: '20px' }}>
+      <h3 style={{ margin: '0 0 16px 0' }}>Create Swipe Poll</h3>
+
+      {/* Poll Type Selection */}
+      <div style={{ marginBottom: '20px' }}>
+        <label style={styles.label}>Poll Type</label>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            type="button"
+            onClick={() => handlePollTypeChange('performance')}
+            style={{
+              ...styles.button,
+              flex: 1,
+              backgroundColor: pollType === 'performance' ? theme.primary : '#f0f0f0',
+              color: pollType === 'performance' ? '#fff' : theme.text,
+            }}
+          >
+            Performance Poll
+          </button>
+          <button
+            type="button"
+            onClick={() => handlePollTypeChange('discovery')}
+            style={{
+              ...styles.button,
+              flex: 1,
+              backgroundColor: pollType === 'discovery' ? theme.secondary : '#f0f0f0',
+              color: pollType === 'discovery' ? '#fff' : theme.text,
+            }}
+          >
+            Discovery Poll
+          </button>
+        </div>
+        <p style={{ fontSize: '13px', color: theme.textSecondary, marginTop: '8px' }}>
+          {pollType === 'performance'
+            ? 'Ask customers about products you currently stock (e.g., underperformers)'
+            : 'Test interest in NEW products before adding them to your inventory'}
+        </p>
+      </div>
+
+      <div style={{ marginBottom: '16px' }}>
+        <label style={styles.label}>Poll Question</label>
+        <input
+          type="text"
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          style={styles.input}
+          required
+        />
+      </div>
+
+      <label style={styles.label}>
+        {pollType === 'discovery' ? 'New Products to Test (add images!)' : 'Products to Vote On'}
+      </label>
+      {products.map((product, index) => (
+        <div key={index} style={{ display: 'flex', gap: '12px', marginBottom: '12px', alignItems: 'center' }}>
+          <input
+            type="text"
+            value={product.name}
+            onChange={(e) => handleProductChange(index, 'name', e.target.value)}
+            style={{ ...styles.input, flex: 2 }}
+            placeholder="Product name"
+            required
+          />
+          <input
+            type="url"
+            value={product.imageUrl}
+            onChange={(e) => handleProductChange(index, 'imageUrl', e.target.value)}
+            style={{ ...styles.input, flex: 2 }}
+            placeholder={pollType === 'discovery' ? 'Image URL (recommended)' : 'Image URL (optional)'}
+          />
+          {products.length > 2 && (
+            <button
+              type="button"
+              onClick={() => handleRemoveProduct(index)}
+              style={{ ...styles.button, ...styles.buttonDanger, padding: '10px 14px' }}
+            >
+              ×
+            </button>
+          )}
+        </div>
+      ))}
+
+      <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+        <button type="button" onClick={handleAddProduct} style={{ ...styles.button, ...styles.buttonSecondary }}>
+          + Add Product
+        </button>
+        <button type="submit" style={styles.button} disabled={loading}>
+          {loading ? 'Creating...' : `Create ${pollType === 'discovery' ? 'Discovery' : ''} Poll`}
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -975,6 +1916,7 @@ function PollResults() {
 
   useEffect(() => {
     loadResults();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pollId]);
 
   const loadResults = async () => {
@@ -982,84 +1924,84 @@ function PollResults() {
       const response = await vendorAPI.getPollResults(pollId);
       setResults(response.data.data);
     } catch (err) {
-      console.error('Error loading poll results:', err);
-      alert('Error: ' + (err.response?.data?.message || 'Failed to load results'));
+      console.error('Error loading results:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) return <div style={{ padding: '20px' }}>Loading...</div>;
-
-  if (!results) {
-    return (
-      <div style={{ padding: '20px' }}>
-        <Link to="/vendor/dashboard" style={{ color: '#007bff' }}>← Back to Dashboard</Link>
-        <p>Poll not found.</p>
-      </div>
-    );
-  }
+  if (loading) return <div style={styles.page}><p>Loading...</p></div>;
+  if (!results) return <div style={styles.page}><p>Poll not found.</p></div>;
 
   return (
-    <div style={{ padding: '20px' }}>
-      <Link to="/vendor/dashboard" style={{ color: '#007bff', marginBottom: '20px', display: 'inline-block' }}>← Back to Dashboard</Link>
+    <div style={styles.page}>
+      <Link to="/vendor/dashboard" style={{ ...styles.link, display: 'inline-block', marginBottom: '24px' }}>
+        ← Back to Dashboard
+      </Link>
 
-      <h2>{results.poll.poll_question}</h2>
-      <p style={{ color: '#666', marginBottom: '20px' }}>
-        <strong>Machine:</strong> {results.poll.machine_name} | <strong>Total Votes:</strong> {results.totalVotes}
+      {/* Poll Type Badge */}
+      <div style={{ marginBottom: '16px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <span style={{
+          padding: '6px 14px',
+          borderRadius: '16px',
+          fontSize: '12px',
+          fontWeight: '500',
+          backgroundColor: results.poll.pollType === 'discovery' ? theme.secondary + '20' : theme.primary + '20',
+          color: results.poll.pollType === 'discovery' ? theme.secondary : theme.primary
+        }}>
+          {results.poll.pollType === 'discovery' ? 'Discovery Poll' : 'Performance Poll'}
+        </span>
+        {results.poll.isAutoGenerated && (
+          <span style={{
+            padding: '6px 14px',
+            borderRadius: '16px',
+            fontSize: '12px',
+            fontWeight: '500',
+            backgroundColor: theme.warning + '20',
+            color: theme.warning
+          }}>
+            Auto-Generated
+          </span>
+        )}
+      </div>
+
+      <h1 style={{ margin: '0 0 8px 0' }}>{results.poll.poll_question}</h1>
+      <p style={{ color: theme.textSecondary, margin: '0 0 32px 0' }}>
+        {results.poll.machine_name} • {results.totalVotes} total votes
       </p>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '20px' }}>
-        {results.options.map(option => (
-          <div key={option.option_id} style={{ border: '1px solid #ddd', padding: '20px', borderRadius: '5px', backgroundColor: 'white' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
+        {results.results.map((option, index) => (
+          <div key={option.option_id} style={styles.card}>
             {option.image_url && (
-              <div style={{ marginBottom: '15px', textAlign: 'center' }}>
-                <img
-                  src={option.image_url}
-                  alt={option.option_text}
-                  style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '8px', objectFit: 'contain' }}
-                  onError={(e) => { e.target.style.display = 'none'; }}
-                />
-              </div>
+              <img src={option.image_url} alt={option.product_name} style={{ width: '100%', height: '150px', objectFit: 'cover', borderRadius: '8px', marginBottom: '12px' }} />
             )}
-            <h3 style={{ margin: '0 0 15px 0' }}>{option.option_text}</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h3 style={{ margin: 0 }}>{option.product_name}</h3>
+              <span style={{
+                padding: '4px 12px',
+                borderRadius: '12px',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                backgroundColor: theme.primary + '20',
+                color: theme.primary
+              }}>
+                #{index + 1}
+              </span>
+            </div>
 
-            <div style={{ marginBottom: '10px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                <span style={{ color: '#28a745', fontWeight: 'bold' }}>Approve</span>
-                <span style={{ color: '#28a745', fontWeight: 'bold' }}>{option.approve_count} ({option.approve_percent}%)</span>
+            <div style={{ marginBottom: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ color: theme.success }}>Want it ({option.swipe_right})</span>
+                <span style={{ fontWeight: 'bold' }}>{option.approval_percent}%</span>
               </div>
-              <div style={{ width: '100%', height: '20px', backgroundColor: '#e9ecef', borderRadius: '10px', overflow: 'hidden' }}>
-                <div
-                  style={{
-                    width: `${option.approve_percent}%`,
-                    height: '100%',
-                    backgroundColor: '#28a745',
-                    transition: 'width 0.3s ease'
-                  }}
-                />
+              <div style={{ height: '8px', backgroundColor: theme.surfaceHover, borderRadius: '4px', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${option.approval_percent}%`, backgroundColor: theme.success, borderRadius: '4px' }} />
               </div>
             </div>
 
-            <div style={{ marginBottom: '10px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                <span style={{ color: '#dc3545', fontWeight: 'bold' }}>Deny</span>
-                <span style={{ color: '#dc3545', fontWeight: 'bold' }}>{option.deny_count} ({100 - option.approve_percent}%)</span>
-              </div>
-              <div style={{ width: '100%', height: '20px', backgroundColor: '#e9ecef', borderRadius: '10px', overflow: 'hidden' }}>
-                <div
-                  style={{
-                    width: `${100 - option.approve_percent}%`,
-                    height: '100%',
-                    backgroundColor: '#dc3545',
-                    transition: 'width 0.3s ease'
-                  }}
-                />
-              </div>
-            </div>
-
-            <p style={{ marginTop: '15px', fontSize: '14px', color: '#666', textAlign: 'center' }}>
-              <strong>Total Votes:</strong> {option.total_votes}
+            <p style={{ color: theme.textMuted, fontSize: '14px', margin: 0 }}>
+              {option.total_votes} total votes • {option.swipe_left} passes
             </p>
           </div>
         ))}
@@ -1068,442 +2010,484 @@ function PollResults() {
   );
 }
 
-// ============================================
-// CUSTOMER COMPONENTS
-// ============================================
-
-function CustomerLogin() {
-  const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [error, setError] = useState('');
-  const navigate = useNavigate();
-  const location = window.location;
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    try {
-      const data = isLogin
-        ? { email, password }
-        : { email, password, fullName };
-
-      const response = isLogin
-        ? await authAPI.customerLogin(data)
-        : await authAPI.customerRegister(data);
-
-      const token = response.data.data.token;
-      localStorage.setItem('token', token);
-      localStorage.setItem('userType', 'customer');
-
-      // Check for returnTo query parameter
-      const params = new URLSearchParams(location.search);
-      const returnTo = params.get('returnTo') || '/customer/portal';
-      navigate(returnTo);
-    } catch (err) {
-      console.error('Customer auth error:', err);
-      setError(err.response?.data?.message || 'Authentication failed');
-    }
-  };
-
-  return (
-    <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px' }}>
-      <h2>Customer {isLogin ? 'Login' : 'Register'}</h2>
-      <form onSubmit={handleSubmit}>
-        {!isLogin && (
-          <div style={{ marginBottom: '10px' }}>
-            <input
-              type="text"
-              placeholder="Full Name"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              style={{ width: '100%', padding: '8px' }}
-              required
-            />
-          </div>
-        )}
-        <div style={{ marginBottom: '10px' }}>
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={{ width: '100%', padding: '8px' }}
-            required
-          />
-        </div>
-        <div style={{ marginBottom: '10px' }}>
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={{ width: '100%', padding: '8px' }}
-            required
-          />
-        </div>
-        {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
-        <button type="submit" style={{ width: '100%', padding: '10px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer' }}>
-          {isLogin ? 'Login' : 'Register'}
-        </button>
-      </form>
-      <p style={{ textAlign: 'center', marginTop: '20px' }}>
-        <button onClick={() => setIsLogin(!isLogin)} style={{ background: 'none', border: 'none', color: '#007bff', cursor: 'pointer', textDecoration: 'underline' }}>
-          {isLogin ? 'Need an account? Register' : 'Have an account? Login'}
-        </button>
-      </p>
-      <p style={{ textAlign: 'center', marginTop: '20px' }}>
-        <Link to="/" style={{ color: '#007bff' }}>Back to Home</Link>
-      </p>
-    </div>
-  );
-}
-
-function CustomerQRScan() {
-  const [qrData, setQrData] = useState('');
-  const [error, setError] = useState('');
-  const navigate = useNavigate();
-  const location = window.location;
-
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      navigate('/customer/login?returnTo=/customer/scan');
-    }
-  }, [navigate]);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    try {
-      const response = await authAPI.customerQRLogin({ qrData });
-      localStorage.setItem('token', response.data.data.sessionToken);
-      localStorage.setItem('userType', 'customer');
-
-      // Check for returnTo query parameter
-      const params = new URLSearchParams(location.search);
-      const returnTo = params.get('returnTo') || '/customer/products';
-      navigate(returnTo);
-    } catch (err) {
-      setError(err.response?.data?.message || 'QR login failed');
-    }
-  };
-
-  return (
-    <div style={{ maxWidth: '400px', margin: '50px auto', padding: '20px' }}>
-      <h2>Scan QR Code</h2>
-      <p>Scan the QR code on your vending machine or paste the QR data below:</p>
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: '10px' }}>
-          <textarea
-            placeholder="Paste QR code data here"
-            value={qrData}
-            onChange={(e) => setQrData(e.target.value)}
-            style={{ width: '100%', padding: '8px', minHeight: '100px' }}
-            required
-          />
-        </div>
-        {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
-        <button type="submit" style={{ width: '100%', padding: '10px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer' }}>
-          Scan QR Code
-        </button>
-      </form>
-      <p style={{ textAlign: 'center', marginTop: '20px' }}>
-        <Link to="/customer/portal" style={{ color: '#007bff' }}>View Portal</Link>
-      </p>
-      <p style={{ textAlign: 'center', marginTop: '10px' }}>
-        <Link to="/" style={{ color: '#007bff' }}>Back to Home</Link>
-      </p>
-    </div>
-  );
-}
-
-function CustomerMachine() {
-  const { qr_token } = useParams();
-  const navigate = useNavigate();
+function TopProducts() {
+  const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const initMachine = async () => {
-      // Check if logged in
-      const token = localStorage.getItem('token');
-      if (!token) {
-        // Redirect to login with returnTo
-        navigate(`/customer/login?returnTo=/customer/machine/${qr_token}`);
-        return;
-      }
-
-      // Resolve QR token to machine ID and set session
-      try {
-        const resolveResponse = await publicAPI.resolveMachineQR(qr_token);
-        const machineId = resolveResponse.data.data.machineId;
-
-        localStorage.setItem('selectedMachineId', machineId.toString());
-        await customerAPI.setMachine({ machineId });
-
-        setLoading(false);
-      } catch (err) {
-        console.error('Error setting machine:', err);
-        alert('Error: ' + (err.response?.data?.message || 'Failed to set machine'));
-        navigate('/customer/login');
-      }
-    };
-
-    initMachine();
-  }, [qr_token, navigate]);
-
-  if (loading) return <div style={{ padding: '20px' }}>Loading...</div>;
-
-  return <CustomerProducts />;
-}
-
-function CustomerProducts() {
-  const [machineData, setMachineData] = useState(null);
-  const [discounts, setDiscounts] = useState([]);
-  const [currentBalance, setCurrentBalance] = useState(0);
-  const [showPointsForm, setShowPointsForm] = useState(false);
-  const [pointsToAdd, setPointsToAdd] = useState('');
-  const [showRedeemForm, setShowRedeemForm] = useState(false);
-  const [redeemCode, setRedeemCode] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    loadMachine();
+    loadTopProducts();
   }, []);
 
-  const loadMachine = async () => {
+  const loadTopProducts = async () => {
     try {
-      setLoading(true);
-      const [machineRes, discountsRes] = await Promise.allSettled([
-        customerAPI.getMachine(),
-        customerAPI.getMachineDiscounts()
-      ]);
-
-      if (machineRes.status === 'fulfilled') {
-        setMachineData(machineRes.value.data.data);
-      } else {
-        console.error('Machine API failed:', machineRes.reason);
-      }
-
-      if (discountsRes.status === 'fulfilled') {
-        setDiscounts(discountsRes.value.data.data.discounts);
-      } else {
-        console.error('Discounts API failed:', discountsRes.reason);
-      }
-
-      // Try to load current balance (may fail if not registered)
-      try {
-        const loyaltyRes = await customerAPI.getLoyalty();
-        const accounts = loyaltyRes.data.data.loyaltyAccounts || [];
-        const machineAccount = accounts.find(acc => acc.machine_id === machineData?.machine?.id);
-        setCurrentBalance(machineAccount?.points_balance || 0);
-      } catch (err) {
-        console.log('Loyalty not available (customer may not be registered)');
-      }
+      const response = await vendorAPI.getTopProducts();
+      setProducts(response.data.data.topProducts);
     } catch (err) {
-      console.error('Error loading machine:', err);
+      console.error('Error loading top products:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('userType');
-    navigate('/customer/login');
-  };
-
-  const handleSubmitPoints = async (e) => {
-    e.preventDefault();
-    setError('');
-    try {
-      await customerAPI.submitPoints({ pointsEarned: parseInt(pointsToAdd) });
-      setPointsToAdd('');
-      setShowPointsForm(false);
-      loadMachine();
-      alert('Points submitted successfully!');
-    } catch (err) {
-      console.error('Error submitting points:', err);
-      const errorMsg = err.response?.data?.message || 'Failed to submit points';
-      setError(errorMsg);
-      alert('Error: ' + errorMsg);
-    }
-  };
-
-  const handleRedeemDiscount = async (e) => {
-    e.preventDefault();
-    setError('');
-    try {
-      const response = await customerAPI.redeemDiscount({ code: redeemCode });
-      setRedeemCode('');
-      setShowRedeemForm(false);
-      loadMachine();
-      alert(response.data.message);
-    } catch (err) {
-      console.error('Error redeeming discount:', err);
-      const errorMsg = err.response?.data?.message || 'Failed to redeem discount';
-      setError(errorMsg);
-      alert('Error: ' + errorMsg);
-    }
-  };
-
-  if (loading) return <div style={{ padding: '20px' }}>Loading...</div>;
+  if (loading) return <div style={styles.page}><p>Loading...</p></div>;
 
   return (
-    <div style={{ padding: '20px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <div>
-          <h1>{machineData?.machine?.machine_name}</h1>
-          <p>{machineData?.machine?.location}</p>
+    <div style={styles.page}>
+      <Link to="/vendor/dashboard" style={{ ...styles.link, display: 'inline-block', marginBottom: '24px' }}>
+        ← Back to Dashboard
+      </Link>
+
+      <h1 style={{ margin: '0 0 8px 0' }}>🏆 Top 50 Products</h1>
+      <p style={{ color: theme.textSecondary, margin: '0 0 32px 0' }}>
+        Most popular products across all vendors based on performance ratings
+      </p>
+
+      {products.length === 0 ? (
+        <div style={{ ...styles.card, textAlign: 'center', padding: '48px' }}>
+          <p style={{ color: theme.textSecondary }}>No performance data yet. Start marking products as performing!</p>
         </div>
-        <button onClick={handleLogout} style={{ padding: '10px 20px', backgroundColor: '#dc3545', color: 'white', border: 'none', cursor: 'pointer' }}>
-          Logout
-        </button>
+      ) : (
+        <div style={{ display: 'grid', gap: '12px' }}>
+          {products.map((product, index) => (
+            <div key={product.product_id} style={{
+              ...styles.card,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '20px',
+              padding: '16px 20px'
+            }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 'bold',
+                fontSize: '16px',
+                backgroundColor: index < 3 ? theme.warning + '20' : theme.surfaceHover,
+                color: index < 3 ? theme.warning : theme.textSecondary
+              }}>
+                {index + 1}
+              </div>
+
+              {product.image_url && (
+                <img src={product.image_url} alt="" style={{ width: '50px', height: '50px', borderRadius: '8px', objectFit: 'cover' }} />
+              )}
+
+              <div style={{ flex: 1 }}>
+                <h4 style={{ margin: 0 }}>{product.product_name}</h4>
+                <p style={{ color: theme.textMuted, margin: 0, fontSize: '14px' }}>
+                  In {product.total_machines} machines
+                </p>
+              </div>
+
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '24px', fontWeight: 'bold', color: theme.success }}>
+                  {product.yes_count}
+                </div>
+                <div style={{ color: theme.textMuted, fontSize: '12px' }}>
+                  performing ({product.performance_percentage}%)
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// ROUTE PLAN - Global Redistribution View
+// ============================================
+
+function RoutePlan() {
+  const [routeData, setRouteData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedStop, setSelectedStop] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const location = useLocation();
+
+  // Reload data whenever the page is navigated to (using location.key)
+  useEffect(() => {
+    loadRoutePlan();
+  }, [location.key]);
+
+  const loadRoutePlan = async () => {
+    try {
+      setLoading(true);
+      const response = await vendorAPI.getRedistributionPlan();
+      setRouteData(response.data.data);
+      setLastUpdated(new Date());
+    } catch (err) {
+      console.error('Error loading route plan:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p>Analyzing machines and generating route plan...</p>
+      </div>
+    );
+  }
+
+  if (!routeData || routeData.routeStops.length === 0) {
+    return (
+      <div style={styles.page}>
+        <Link to="/vendor/dashboard" style={{ ...styles.link, display: 'inline-block', marginBottom: '24px' }}>
+          ← Back to Dashboard
+        </Link>
+        <div style={{ ...styles.card, textAlign: 'center', padding: '48px' }}>
+          <div style={{ fontSize: '64px', marginBottom: '16px' }}>✓</div>
+          <h2 style={{ margin: '0 0 8px 0' }}>No Redistribution Needed</h2>
+          <p style={{ color: theme.textSecondary, margin: 0 }}>
+            All products are performing well in their current machines, or there are no better placement opportunities.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={styles.page}>
+      <Link to="/vendor/dashboard" style={{ ...styles.link, display: 'inline-block', marginBottom: '24px' }}>
+        ← Back to Dashboard
+      </Link>
+
+      {/* Header */}
+      <div style={{ ...styles.card, marginBottom: '24px', background: `linear-gradient(135deg, ${theme.primary}20, ${theme.surface})` }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '16px' }}>
+          <div>
+            <h1 style={{ margin: '0 0 8px 0' }}>📋 Route Plan</h1>
+            <p style={{ color: theme.textSecondary, margin: 0 }}>
+              Optimized redistribution plan based on product performance across all machines
+            </p>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <button
+              onClick={loadRoutePlan}
+              disabled={loading}
+              style={{ ...styles.button, ...styles.buttonSecondary, marginBottom: '8px' }}
+            >
+              {loading ? 'Refreshing...' : '↻ Refresh'}
+            </button>
+            {lastUpdated && (
+              <div style={{ fontSize: '12px', color: theme.textMuted }}>
+                Updated: {lastUpdated.toLocaleTimeString()}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Summary Stats */}
+        <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.warning }}>
+              {routeData.summary.totalMachinesAffected}
+            </div>
+            <div style={{ color: theme.textMuted, fontSize: '14px' }}>Machines to Visit</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.danger }}>
+              {routeData.summary.totalProductsToRemove}
+            </div>
+            <div style={{ color: theme.textMuted, fontSize: '14px' }}>Products to Remove</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.success }}>
+              {routeData.summary.totalProductsToAdd}
+            </div>
+            <div style={{ color: theme.textMuted, fontSize: '14px' }}>Products to Add</div>
+          </div>
+        </div>
       </div>
 
-      <div style={{ marginBottom: '20px' }}>
-        <Link to="/customer/polls" style={{ marginRight: '15px', color: '#007bff' }}>View Polls</Link>
-        <Link to="/customer/portal" style={{ color: '#007bff' }}>Customer Portal</Link>
-      </div>
+      {/* Route Stops */}
+      <h2 style={{ margin: '0 0 16px 0' }}>Route Stops ({routeData.routeStops.length})</h2>
+      <p style={{ color: theme.textSecondary, marginBottom: '20px' }}>
+        Click on a machine to see what to REMOVE (underperforming) and ADD (performing well here)
+      </p>
 
-      <h2>Available Products</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '20px', marginTop: '20px' }}>
-        {machineData?.products?.map(product => (
-          <div key={product.id} style={{ border: '1px solid #ddd', padding: '15px', borderRadius: '5px' }}>
-            <h3>{product.product_name}</h3>
-            <p><strong>Price:</strong> ${product.price}</p>
-            <p><strong>Stock:</strong> {product.current_stock}</p>
-            {product.description && <p style={{ fontSize: '14px', color: '#666' }}>{product.description}</p>}
+      <div style={{ display: 'grid', gap: '16px' }}>
+        {routeData.routeStops.map((stop, index) => (
+          <div
+            key={stop.machineId}
+            style={{
+              ...styles.card,
+              cursor: 'pointer',
+              borderLeft: `4px solid ${selectedStop === stop.machineId ? theme.primary : theme.border}`,
+              backgroundColor: selectedStop === stop.machineId ? theme.surfaceHover : theme.surface,
+            }}
+            onClick={() => setSelectedStop(selectedStop === stop.machineId ? null : stop.machineId)}
+          >
+            {/* Stop Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+                  <span style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '50%',
+                    backgroundColor: theme.primary,
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 'bold',
+                    fontSize: '14px'
+                  }}>
+                    {index + 1}
+                  </span>
+                  <h3 style={{ margin: 0 }}>{stop.machineName}</h3>
+                </div>
+                <p style={{ color: theme.textMuted, margin: '0 0 0 40px', fontSize: '14px' }}>
+                  📍 {stop.location}
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '16px' }}>
+                {stop.remove.length > 0 && (
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '20px', fontWeight: 'bold', color: theme.danger }}>
+                      {stop.remove.length}
+                    </div>
+                    <div style={{ fontSize: '12px', color: theme.textMuted }}>Remove</div>
+                  </div>
+                )}
+                {stop.add.length > 0 && (
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '20px', fontWeight: 'bold', color: theme.success }}>
+                      {stop.add.length}
+                    </div>
+                    <div style={{ fontSize: '12px', color: theme.textMuted }}>Add</div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Expanded Details */}
+            {selectedStop === stop.machineId && (
+              <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: `1px solid ${theme.border}` }}>
+                {/* REMOVE Section */}
+                {stop.remove.length > 0 && (
+                  <div style={{ marginBottom: '20px' }}>
+                    <h4 style={{ color: theme.danger, margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      ❌ REMOVE from this machine (underperforming here)
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {stop.remove.map(item => (
+                        <div
+                          key={item.productId}
+                          style={{
+                            padding: '12px',
+                            backgroundColor: theme.danger + '10',
+                            borderRadius: '8px',
+                            borderLeft: `3px solid ${theme.danger}`
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                            <div>
+                              <p style={{ margin: 0, fontWeight: '600' }}>{item.productName}</p>
+                              <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: theme.textMuted }}>
+                                Stock: {item.currentStock} units available
+                              </p>
+                            </div>
+                          </div>
+                          {item.suggestedTargets && item.suggestedTargets.length > 0 && (
+                            <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: `1px dashed ${theme.border}` }}>
+                              <p style={{ margin: '0 0 4px 0', fontSize: '12px', color: theme.textMuted }}>
+                                → Move to (performs well at):
+                              </p>
+                              {item.suggestedTargets.slice(0, 2).map(target => (
+                                <span
+                                  key={target.machineId}
+                                  style={{
+                                    display: 'inline-block',
+                                    padding: '2px 8px',
+                                    backgroundColor: theme.success + '20',
+                                    color: theme.success,
+                                    borderRadius: '4px',
+                                    fontSize: '12px',
+                                    marginRight: '6px',
+                                    marginTop: '4px'
+                                  }}
+                                >
+                                  {target.machineName}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ADD Section */}
+                {stop.add.length > 0 && (
+                  <div>
+                    <h4 style={{ color: theme.success, margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      ✅ ADD to this machine (performs well here)
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {stop.add.map((item, idx) => (
+                        <div
+                          key={`${item.productId}-${item.sourceMachineId}-${idx}`}
+                          style={{
+                            padding: '12px',
+                            backgroundColor: theme.success + '10',
+                            borderRadius: '8px',
+                            borderLeft: `3px solid ${theme.success}`
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                            <div>
+                              <p style={{ margin: 0, fontWeight: '600' }}>{item.productName}</p>
+                              <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: theme.textMuted }}>
+                                From: {item.sourceMachineName} ({item.availableStock} available)
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Button */}
+                <div style={{ marginTop: '16px', display: 'flex', gap: '12px' }}>
+                  <Link
+                    to={`/vendor/machines/${stop.machineId}`}
+                    style={{ ...styles.button, textDecoration: 'none', textAlign: 'center', flex: 1 }}
+                  >
+                    Open Machine Details
+                  </Link>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
 
-      {/* Loyalty Points Section */}
-      <div style={{ marginTop: '40px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2>Loyalty Points</h2>
-          <button
-            onClick={() => setShowPointsForm(!showPointsForm)}
-            style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', cursor: 'pointer' }}
-          >
-            {showPointsForm ? 'Cancel' : 'Submit Points'}
-          </button>
-        </div>
-
-        <div style={{ backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '5px', marginTop: '10px' }}>
-          <p style={{ fontSize: '18px', margin: 0 }}><strong>Current Balance:</strong> {currentBalance} points</p>
-        </div>
-
-        {showPointsForm && (
-          <form onSubmit={handleSubmitPoints} style={{ backgroundColor: '#fff', padding: '20px', marginTop: '10px', border: '1px solid #ddd', borderRadius: '5px' }}>
-            <h4>Submit Points</h4>
-            <div style={{ marginBottom: '10px' }}>
-              <input
-                type="number"
-                placeholder="Points to add"
-                value={pointsToAdd}
-                onChange={(e) => setPointsToAdd(e.target.value)}
-                style={{ width: '100%', padding: '8px' }}
-                min="1"
-                required
-              />
-            </div>
-            {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
-            <button type="submit" style={{ padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer' }}>
-              Submit
-            </button>
-          </form>
-        )}
-      </div>
-
-      {/* Redeem Discount Section */}
-      <div style={{ marginTop: '40px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2>Redeem Discount Code</h2>
-          <button
-            onClick={() => setShowRedeemForm(!showRedeemForm)}
-            style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', cursor: 'pointer' }}
-          >
-            {showRedeemForm ? 'Cancel' : 'Redeem Code'}
-          </button>
-        </div>
-
-        {showRedeemForm && (
-          <form onSubmit={handleRedeemDiscount} style={{ backgroundColor: '#fff', padding: '20px', marginTop: '10px', border: '1px solid #ddd', borderRadius: '5px' }}>
-            <h4>Enter Discount Code</h4>
-            <div style={{ marginBottom: '10px' }}>
-              <input
-                type="text"
-                placeholder="Enter code (e.g., SAVE15)"
-                value={redeemCode}
-                onChange={(e) => setRedeemCode(e.target.value.toUpperCase())}
-                style={{ width: '100%', padding: '8px', textTransform: 'uppercase' }}
-                required
-              />
-            </div>
-            {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
-            <button type="submit" style={{ padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer' }}>
-              Redeem
-            </button>
-          </form>
-        )}
-      </div>
-
-      {/* Active Discounts Section */}
-      <div style={{ marginTop: '40px' }}>
-        <h2>Active Discounts</h2>
-        {discounts.length === 0 ? (
-          <p>No active discounts at this time.</p>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '20px', marginTop: '20px' }}>
-            {discounts.map(discount => (
-              <div key={discount.id} style={{ border: '1px solid #28a745', padding: '15px', borderRadius: '5px', backgroundColor: '#f0fff4' }}>
-                <h3 style={{ margin: '0 0 10px 0', color: '#28a745' }}>{discount.code}</h3>
-                <p><strong>Discount:</strong> {discount.discount_value}% off</p>
-                <p><strong>Product:</strong> {discount.product_name || 'All products'}</p>
-                {discount.valid_until && (
-                  <p style={{ fontSize: '14px', color: '#666' }}>
-                    <strong>Valid until:</strong> {new Date(discount.valid_until).toLocaleDateString()}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+      {/* Instructions */}
+      <div style={{ ...styles.card, marginTop: '24px', backgroundColor: theme.warning + '10', borderLeft: `4px solid ${theme.warning}` }}>
+        <h3 style={{ margin: '0 0 8px 0', color: theme.warning }}>📝 How to Use This Plan</h3>
+        <ol style={{ margin: 0, paddingLeft: '20px', color: theme.textSecondary, lineHeight: '1.8' }}>
+          <li>Review each stop on your route</li>
+          <li>At each machine, <strong>REMOVE</strong> the underperforming products (red items)</li>
+          <li>Keep removed products on your truck for later stops</li>
+          <li>At machines where products perform well, <strong>ADD</strong> products from your truck (green items)</li>
+          <li>This optimizes sales and reduces spoilage!</li>
+        </ol>
       </div>
     </div>
   );
 }
 
-function CustomerPolls() {
-  const [poll, setPoll] = useState(null);
-  const [currentOptionIndex, setCurrentOptionIndex] = useState(0);
+// ============================================
+// CUSTOMER COMPONENTS (Anonymous)
+// ============================================
+
+function CustomerMachine() {
+  const { qr_token } = useParams();
   const [loading, setLoading] = useState(true);
-  const [completed, setCompleted] = useState(false);
-  const navigate = useNavigate();
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      navigate('/customer/login?returnTo=/customer/polls');
-      return;
+    const initMachine = async () => {
+      try {
+        const resolveResponse = await publicAPI.resolveMachineQR(qr_token);
+        const machineId = resolveResponse.data.data.machineId;
+
+        const sessionResponse = await customerAPI.setMachine({ machineId });
+        const sessionToken = sessionResponse.data.data.sessionToken;
+
+        localStorage.setItem('token', sessionToken);
+        localStorage.setItem('selectedMachineId', machineId.toString());
+
+        setLoading(false);
+      } catch (err) {
+        console.error('Error:', err);
+        setError(err.response?.data?.message || 'Failed to access machine');
+        setLoading(false);
+      }
+    };
+
+    initMachine();
+  }, [qr_token]);
+
+  if (loading) {
+    return (
+      <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+        <div>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔄</div>
+          <p>Connecting to machine...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+        <div>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>❌</div>
+          <p style={{ color: theme.danger }}>{error}</p>
+          <Link to="/" style={{ ...styles.button, display: 'inline-block', marginTop: '16px', textDecoration: 'none' }}>
+            Go Home
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return <CustomerSwipe />;
+}
+
+function CustomerSwipe() {
+  const [poll, setPoll] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [completed, setCompleted] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [swiping, setSwiping] = useState(null);
+  const [suggestion, setSuggestion] = useState('');
+  const [suggestionSubmitted, setSuggestionSubmitted] = useState(false);
+  const [submittingSuggestion, setSubmittingSuggestion] = useState(false);
+  const cardRef = useRef(null);
+  const toast = useToast();
+
+  const handleSubmitSuggestion = async () => {
+    if (!suggestion.trim()) return;
+    setSubmittingSuggestion(true);
+    try {
+      await customerAPI.submitSuggestion(suggestion.trim());
+      setSuggestionSubmitted(true);
+      setSuggestion('');
+    } catch (err) {
+      toast.error('Failed to submit suggestion');
+    } finally {
+      setSubmittingSuggestion(false);
     }
+  };
+
+  useEffect(() => {
     loadPolls();
-  }, [navigate]);
+  }, []);
 
   const loadPolls = async () => {
     try {
       const response = await customerAPI.getPolls();
-      const pollData = response.data.data.poll;
+      const data = response.data.data;
 
-      if (!pollData) {
+      if (!data.poll || data.products.length === 0) {
         setCompleted(true);
       } else {
-        setPoll(pollData);
-        setCurrentOptionIndex(0);
+        setPoll(data.poll);
+        setProducts(data.products);
       }
     } catch (err) {
       console.error('Error loading polls:', err);
@@ -1514,622 +2498,568 @@ function CustomerPolls() {
   };
 
   const handleVote = async (voteType) => {
-    if (!poll || !poll.options[currentOptionIndex]) return;
+    if (!poll || !products[currentIndex]) return;
+
+    setSwiping(voteType);
 
     try {
-      const currentOption = poll.options[currentOptionIndex];
       await customerAPI.votePoll(poll.id, {
-        optionId: currentOption.id,
+        optionId: products[currentIndex].id,
         voteType: voteType
       });
 
-      // Move to next option
-      if (currentOptionIndex < poll.options.length - 1) {
-        setCurrentOptionIndex(currentOptionIndex + 1);
-      } else {
-        // Finished all options
-        setCompleted(true);
-      }
+      setTimeout(() => {
+        setSwiping(null);
+        if (currentIndex < products.length - 1) {
+          setCurrentIndex(currentIndex + 1);
+        } else {
+          setCompleted(true);
+        }
+      }, 300);
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to vote');
+      setSwiping(null);
+      toast.error(err.response?.data?.message || 'Failed to vote');
     }
   };
 
-  if (loading) return <div style={{ padding: '20px' }}>Loading...</div>;
-
-  if (completed || !poll || poll.options.length === 0) {
+  if (loading) {
     return (
-      <div style={{ padding: '20px', maxWidth: '500px', margin: '50px auto', textAlign: 'center' }}>
-        <h1>Product Polls</h1>
-        <div style={{ marginTop: '40px', padding: '30px', backgroundColor: '#f8f9fa', borderRadius: '10px' }}>
-          <h2 style={{ color: '#28a745', marginBottom: '15px' }}>Thank you for your help!</h2>
-          <p style={{ fontSize: '18px', color: '#666' }}>Enjoy your day.</p>
-        </div>
-        <button
-          onClick={() => navigate('/customer/portal')}
-          style={{ marginTop: '30px', padding: '12px 30px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '16px' }}
-        >
-          Back to Portal
-        </button>
+      <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p>Loading...</p>
       </div>
     );
   }
 
-  const currentOption = poll.options[currentOptionIndex];
-  const progress = `${currentOptionIndex + 1} / ${poll.options.length}`;
+  if (completed) {
+    return (
+      <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+        <div style={{ ...styles.card, maxWidth: '400px', width: '100%' }}>
+          <div style={{ fontSize: '64px', marginBottom: '16px' }}>🎉</div>
+          <h2 style={{ margin: '0 0 8px 0' }}>Thank You!</h2>
+          <p style={{ color: theme.textSecondary, margin: '0 0 24px 0' }}>
+            Your feedback helps us stock better products.
+          </p>
 
-  return (
-    <div style={{ padding: '20px', maxWidth: '500px', margin: '0 auto', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ marginBottom: '20px' }}>
-        <Link to="/customer/portal" style={{ color: '#007bff' }}>← Back to Portal</Link>
-      </div>
-
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-        <h2 style={{ textAlign: 'center', marginBottom: '10px' }}>{poll.question}</h2>
-        <p style={{ textAlign: 'center', color: '#666', marginBottom: '30px' }}>{progress}</p>
-
-        {/* Card */}
-        <div style={{
-          backgroundColor: 'white',
-          border: '2px solid #ddd',
-          borderRadius: '15px',
-          padding: '30px',
-          marginBottom: '30px',
-          boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-          textAlign: 'center'
-        }}>
-          {currentOption.image_url && (
-            <div style={{ marginBottom: '20px' }}>
-              <img
-                src={currentOption.image_url}
-                alt={currentOption.option_text}
-                style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '10px', objectFit: 'contain' }}
-                onError={(e) => { e.target.style.display = 'none'; }}
-              />
-            </div>
-          )}
-          <h3 style={{ fontSize: '24px', margin: '0', color: '#333' }}>{currentOption.option_text}</h3>
-        </div>
-
-        {/* Action Buttons */}
-        <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
-          <button
-            onClick={() => handleVote('dislike')}
-            style={{
-              flex: 1,
-              maxWidth: '200px',
-              padding: '20px',
-              backgroundColor: '#dc3545',
-              color: 'white',
-              border: 'none',
-              borderRadius: '10px',
-              cursor: 'pointer',
-              fontSize: '18px',
-              fontWeight: 'bold',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-            }}
-          >
-            Deny
-          </button>
-          <button
-            onClick={() => handleVote('like')}
-            style={{
-              flex: 1,
-              maxWidth: '200px',
-              padding: '20px',
-              backgroundColor: '#28a745',
-              color: 'white',
-              border: 'none',
-              borderRadius: '10px',
-              cursor: 'pointer',
-              fontSize: '18px',
-              fontWeight: 'bold',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-            }}
-          >
-            Approve
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DiscountHub() {
-  const [discountCode, setDiscountCode] = useState('');
-  const [showScanner, setShowScanner] = useState(false);
-  const [selectedMachineId, setSelectedMachineId] = useState(null);
-  const [activeDiscounts, setActiveDiscounts] = useState([]);
-  const [selectedDiscount, setSelectedDiscount] = useState(null);
-  const [proofImage, setProofImage] = useState(null);
-  const [showRedemptionModal, setShowRedemptionModal] = useState(false);
-  const [loyalty, setLoyalty] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [loadingDiscounts, setLoadingDiscounts] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      navigate('/customer/login?returnTo=/customer/discount-hub');
-      return;
-    }
-    loadLoyalty();
-    const savedMachineId = localStorage.getItem('selectedMachineId');
-    if (savedMachineId) {
-      const machineId = parseInt(savedMachineId);
-      setSelectedMachineId(machineId);
-      loadActiveDiscounts(machineId);
-    }
-  }, [navigate]);
-
-  useEffect(() => {
-    if (selectedMachineId) {
-      loadActiveDiscounts(selectedMachineId);
-    }
-  }, [selectedMachineId]);
-
-  const loadLoyalty = async () => {
-    try {
-      const response = await customerAPI.getLoyalty();
-      setLoyalty(response.data.data);
-    } catch (err) {
-      console.error('Error loading loyalty:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRedeemDiscount = async (e) => {
-    e.preventDefault();
-    setError('');
-
-    if (!selectedMachineId) {
-      setError('Please scan QR code to select a machine first');
-      return;
-    }
-
-    try {
-      const response = await customerAPI.redeemDiscount({ code: discountCode });
-      alert(response.data.message || 'Discount redeemed successfully!');
-      setDiscountCode('');
-      loadLoyalty();
-    } catch (err) {
-      console.error('Error redeeming discount:', err);
-      const errorMsg = err.response?.data?.message || 'Failed to redeem discount';
-      setError(errorMsg);
-    }
-  };
-
-  const handleSelectMachine = (machineId) => {
-    setSelectedMachineId(machineId);
-    localStorage.setItem('selectedMachineId', machineId.toString());
-    setShowScanner(false);
-    loadActiveDiscounts(machineId);
-  };
-
-  const loadActiveDiscounts = async (machineId) => {
-    if (!machineId) return;
-    try {
-      setLoadingDiscounts(true);
-      const response = await customerAPI.getMachineDiscounts(machineId);
-      setActiveDiscounts(response.data.data.discounts || []);
-    } catch (err) {
-      console.error('Error loading discounts:', err);
-      setActiveDiscounts([]);
-    } finally {
-      setLoadingDiscounts(false);
-    }
-  };
-
-  const handleStartRedemption = (discount) => {
-    setSelectedDiscount(discount);
-    setProofImage(null);
-    setError('');
-    setShowRedemptionModal(true);
-  };
-
-  const handleSubmitRedemption = async () => {
-    if (!proofImage) {
-      setError('Please select a proof of purchase image');
-      return;
-    }
-
-    if (!selectedDiscount || !selectedMachineId) {
-      setError('Missing required information');
-      return;
-    }
-
-    try {
-      setSubmitting(true);
-      setError('');
-
-      const formData = new FormData();
-      formData.append('machineId', selectedMachineId);
-      formData.append('discountId', selectedDiscount.id);
-      formData.append('proofImage', proofImage);
-
-      const response = await customerAPI.submitRedemption(formData);
-
-      alert(response.data.message || 'Redemption successful!');
-      setShowRedemptionModal(false);
-      setSelectedDiscount(null);
-      setProofImage(null);
-
-      // Reload data
-      loadLoyalty();
-      loadActiveDiscounts(selectedMachineId);
-    } catch (err) {
-      console.error('Error submitting redemption:', err);
-      const errorMsg = err.response?.data?.message || 'Failed to submit redemption';
-      setError(errorMsg);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleRedeemReward = async (rewardName) => {
-    if ((loyalty?.totalPoints || 0) < 100) {
-      alert('You need at least 100 points to redeem a reward');
-      return;
-    }
-
-    alert(`Redeeming ${rewardName} for 100 points (Backend integration pending)`);
-  };
-
-  if (loading) return <div style={{ padding: '20px' }}>Loading...</div>;
-
-  const totalPoints = loyalty?.totalPoints || 0;
-  const progressPercent = Math.min((totalPoints % 100), 100);
-  const canRedeem = totalPoints >= 100;
-
-  const rewards = [
-    { name: 'Honey Buns', points: 100 },
-    { name: 'Coke', points: 100 },
-    { name: 'Sprite', points: 100 },
-    { name: 'Sandwich', points: 100 },
-    { name: 'Chips', points: 100 },
-    { name: 'Water', points: 100 },
-  ];
-
-  return (
-    <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
-      <h1>Discount Hub</h1>
-      <button onClick={() => navigate('/customer/portal')} style={{ marginBottom: '20px', padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
-        ← Back to Portal
-      </button>
-
-      <div style={{ backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '5px', marginBottom: '20px' }}>
-        <h3 style={{ marginTop: 0 }}>Selected Machine</h3>
-        {selectedMachineId ? (
-          <p style={{ color: '#28a745', fontWeight: 'bold' }}>Machine #{selectedMachineId} selected</p>
-        ) : (
-          <p style={{ color: '#dc3545' }}>No machine selected</p>
-        )}
-        <button
-          onClick={() => setShowScanner(!showScanner)}
-          style={{ padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', marginTop: '10px' }}
-        >
-          {showScanner ? 'Close Scanner' : 'Scan QR Code'}
-        </button>
-      </div>
-
-      {showScanner && (
-        <div style={{ backgroundColor: '#fff', padding: '20px', border: '2px solid #007bff', borderRadius: '5px', marginBottom: '20px' }}>
-          <h3>Scan Machine QR Code</h3>
-          <p>Enter machine ID manually or scan QR code:</p>
-          <input
-            type="number"
-            placeholder="Enter Machine ID"
-            style={{ width: '100%', padding: '10px', marginBottom: '10px', borderRadius: '5px', border: '1px solid #ddd' }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && e.target.value) {
-                handleSelectMachine(parseInt(e.target.value));
-              }
-            }}
-          />
-          <button
-            onClick={() => navigate('/customer/scan')}
-            style={{ width: '100%', padding: '10px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}
-          >
-            Open Camera Scanner
-          </button>
-        </div>
-      )}
-
-      {selectedMachineId && (
-        <div style={{ backgroundColor: '#fff', padding: '20px', border: '1px solid #ddd', borderRadius: '5px', marginBottom: '20px' }}>
-          <h3 style={{ marginTop: 0 }}>Active Discounts</h3>
-          {loadingDiscounts ? (
-            <p>Loading discounts...</p>
-          ) : activeDiscounts.length === 0 ? (
-            <p style={{ color: '#666' }}>No active discounts available for this machine.</p>
-          ) : (
-            <div>
-              {activeDiscounts.map((discount) => (
-                <div
-                  key={discount.id}
+          {/* Product Suggestion Box */}
+          <div style={{
+            borderTop: `1px solid ${theme.border}`,
+            paddingTop: '24px',
+            marginTop: '8px'
+          }}>
+            <p style={{ margin: '0 0 12px 0', fontWeight: '500' }}>
+              Don't see a product you want?
+            </p>
+            {suggestionSubmitted ? (
+              <div style={{
+                backgroundColor: theme.success + '20',
+                border: `1px solid ${theme.success}`,
+                borderRadius: '8px',
+                padding: '12px',
+                color: theme.success
+              }}>
+                ✓ Thanks! Your suggestion was sent to the vendor.
+              </div>
+            ) : (
+              <div>
+                <input
+                  type="text"
+                  placeholder="Suggest a product (e.g., Takis, Gatorade)"
+                  value={suggestion}
+                  onChange={(e) => setSuggestion(e.target.value)}
+                  maxLength={100}
                   style={{
-                    padding: '15px',
-                    marginBottom: '10px',
-                    backgroundColor: '#f8f9fa',
-                    borderRadius: '5px',
-                    border: '1px solid #dee2e6'
+                    ...styles.input,
+                    width: '100%',
+                    marginBottom: '12px',
+                    textAlign: 'center'
+                  }}
+                />
+                <button
+                  onClick={handleSubmitSuggestion}
+                  disabled={!suggestion.trim() || submittingSuggestion}
+                  style={{
+                    ...styles.button,
+                    width: '100%',
+                    opacity: !suggestion.trim() || submittingSuggestion ? 0.5 : 1
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ flex: 1 }}>
-                      <h4 style={{ margin: '0 0 5px 0', color: '#007bff' }}>{discount.code}</h4>
-                      {discount.product_name && <p style={{ margin: '5px 0', fontSize: '14px' }}><strong>Product:</strong> {discount.product_name}</p>}
-                      <p style={{ margin: '5px 0', fontSize: '14px' }}>
-                        <strong>Discount:</strong> {discount.discount_value}% off
-                      </p>
-                      {discount.valid_until && (
-                        <p style={{ margin: '5px 0', fontSize: '12px', color: '#666' }}>
-                          Expires: {new Date(discount.valid_until).toLocaleDateString()}
-                        </p>
-                      )}
-                      {discount.max_uses && (
-                        <p style={{ margin: '5px 0', fontSize: '12px', color: '#666' }}>
-                          {discount.max_uses - discount.current_uses} uses remaining
-                        </p>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => handleStartRedemption(discount)}
-                      style={{
-                        padding: '10px 20px',
-                        backgroundColor: '#28a745',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '5px',
-                        cursor: 'pointer',
-                        fontWeight: 'bold',
-                        marginLeft: '15px'
-                      }}
-                    >
-                      Redeem
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {showRedemptionModal && selectedDiscount && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '10px', maxWidth: '500px', width: '90%' }}>
-            <h3 style={{ marginTop: 0 }}>Redeem: {selectedDiscount.code}</h3>
-            <p>Upload proof of purchase to redeem this discount and earn 10 loyalty points.</p>
-
-            <div style={{ marginBottom: '15px' }}>
-              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Proof of Purchase Image:</label>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => {
-                  setProofImage(e.target.files[0]);
-                  setError('');
-                }}
-                style={{ width: '100%', padding: '10px', border: '1px solid #ddd', borderRadius: '5px' }}
-              />
-              {proofImage && (
-                <p style={{ marginTop: '5px', fontSize: '14px', color: '#28a745' }}>
-                  Selected: {proofImage.name}
-                </p>
-              )}
-            </div>
-
-            {error && <div style={{ color: 'red', marginBottom: '10px', fontSize: '14px' }}>{error}</div>}
-
-            <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-              <button
-                onClick={handleSubmitRedemption}
-                disabled={submitting || !proofImage}
-                style={{
-                  flex: 1,
-                  padding: '12px',
-                  backgroundColor: submitting || !proofImage ? '#6c757d' : '#28a745',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '5px',
-                  cursor: submitting || !proofImage ? 'not-allowed' : 'pointer',
-                  fontWeight: 'bold'
-                }}
-              >
-                {submitting ? 'Submitting...' : 'Submit Redemption'}
-              </button>
-              <button
-                onClick={() => {
-                  setShowRedemptionModal(false);
-                  setSelectedDiscount(null);
-                  setProofImage(null);
-                  setError('');
-                }}
-                disabled={submitting}
-                style={{
-                  flex: 1,
-                  padding: '12px',
-                  backgroundColor: '#dc3545',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '5px',
-                  cursor: submitting ? 'not-allowed' : 'pointer',
-                  fontWeight: 'bold'
-                }}
-              >
-                Cancel
-              </button>
-            </div>
+                  {submittingSuggestion ? 'Sending...' : 'Submit Suggestion'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
-      )}
+      </div>
+    );
+  }
 
-      <div style={{ backgroundColor: '#fff', padding: '20px', border: '1px solid #ddd', borderRadius: '5px', marginBottom: '20px' }}>
-        <h3 style={{ marginTop: 0 }}>Points Progress</h3>
-        <p style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '10px' }}>
-          {totalPoints} / 100 points toward next reward
-        </p>
-        <div style={{ width: '100%', height: '30px', backgroundColor: '#e9ecef', borderRadius: '15px', overflow: 'hidden', position: 'relative' }}>
-          <div
-            style={{
-              width: `${progressPercent}%`,
-              height: '100%',
-              backgroundColor: totalPoints >= 100 ? '#28a745' : '#007bff',
-              transition: 'width 0.3s ease',
+  const currentProduct = products[currentIndex];
+  const progress = `${currentIndex + 1} / ${products.length}`;
+
+  return (
+    <div style={{ ...styles.page, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+      {/* Header */}
+      <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+        {/* Poll Type Indicator */}
+        {poll?.pollType && (
+          <div style={{ marginBottom: '12px' }}>
+            <span style={{
+              padding: '6px 14px',
+              borderRadius: '16px',
+              fontSize: '12px',
+              fontWeight: '500',
+              backgroundColor: poll.pollType === 'discovery' ? theme.secondary + '20' : theme.primary + '20',
+              color: poll.pollType === 'discovery' ? theme.secondary : theme.primary
+            }}>
+              {poll.pollType === 'discovery' ? 'New Product Discovery' : 'Help Us Improve'}
+            </span>
+          </div>
+        )}
+        <h2 style={{ margin: '0 0 8px 0' }}>{poll?.question || 'Which products do you want?'}</h2>
+        <p style={{ color: theme.textSecondary, margin: 0 }}>{progress}</p>
+
+        {/* Progress bar */}
+        <div style={{ height: '4px', backgroundColor: theme.surfaceHover, borderRadius: '2px', marginTop: '16px' }}>
+          <div style={{
+            height: '100%',
+            width: `${((currentIndex + 1) / products.length) * 100}%`,
+            backgroundColor: theme.primary,
+            borderRadius: '2px',
+            transition: 'width 0.3s'
+          }} />
+        </div>
+      </div>
+
+      {/* Card */}
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div
+          ref={cardRef}
+          style={{
+            ...styles.card,
+            width: '100%',
+            maxWidth: '350px',
+            textAlign: 'center',
+            transform: swiping === 'like' ? 'translateX(50px) rotate(5deg)' :
+                       swiping === 'dislike' ? 'translateX(-50px) rotate(-5deg)' : 'none',
+            transition: 'transform 0.3s',
+            opacity: swiping ? 0.8 : 1,
+            borderColor: swiping === 'like' ? theme.success :
+                         swiping === 'dislike' ? theme.danger : theme.border,
+          }}
+        >
+          {currentProduct?.image_url ? (
+            <img
+              src={currentProduct.image_url}
+              alt={currentProduct.product_name}
+              style={{
+                width: '100%',
+                height: '250px',
+                objectFit: 'cover',
+                borderRadius: '8px',
+                marginBottom: '16px'
+              }}
+              onError={(e) => { e.target.style.display = 'none'; }}
+            />
+          ) : (
+            <div style={{
+              width: '100%',
+              height: '200px',
+              backgroundColor: theme.surfaceHover,
+              borderRadius: '8px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'white',
-              fontWeight: 'bold',
-              fontSize: '14px'
-            }}
-          >
-            {progressPercent}%
-          </div>
+              marginBottom: '16px',
+              fontSize: '64px'
+            }}>
+              🍫
+            </div>
+          )}
+          <h3 style={{ margin: 0, fontSize: '24px' }}>{currentProduct?.product_name}</h3>
         </div>
-        {canRedeem && (
-          <p style={{ color: '#28a745', fontWeight: 'bold', marginTop: '10px' }}>
-            🎉 You have enough points to redeem a reward!
-          </p>
-        )}
       </div>
 
-      <div style={{ backgroundColor: '#fff', padding: '20px', border: '1px solid #ddd', borderRadius: '5px' }}>
-        <h3 style={{ marginTop: 0 }}>Available Rewards (100 Points Each)</h3>
-        {rewards.map((reward, index) => (
-          <div
-            key={index}
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '15px',
-              marginBottom: '10px',
-              backgroundColor: '#f8f9fa',
-              borderRadius: '5px',
-              border: '1px solid #dee2e6'
-            }}
-          >
-            <div>
-              <strong>{reward.name}</strong>
-              <p style={{ margin: '5px 0 0 0', fontSize: '14px', color: '#666' }}>{reward.points} points</p>
-            </div>
-            <button
-              onClick={() => handleRedeemReward(reward.name)}
-              disabled={!canRedeem}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: canRedeem ? '#28a745' : '#6c757d',
-                color: 'white',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: canRedeem ? 'pointer' : 'not-allowed',
-                fontWeight: 'bold',
-                opacity: canRedeem ? 1 : 0.6
-              }}
-            >
-              {canRedeem ? 'Redeem' : 'Locked'}
-            </button>
-          </div>
-        ))}
+      {/* Action Buttons */}
+      <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', padding: '24px 0' }}>
+        <button
+          onClick={() => handleVote('dislike')}
+          disabled={swiping}
+          style={{
+            width: '80px',
+            height: '80px',
+            borderRadius: '50%',
+            border: `3px solid ${theme.danger}`,
+            backgroundColor: 'transparent',
+            color: theme.danger,
+            fontSize: '32px',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+          }}
+        >
+          ✗
+        </button>
+        <button
+          onClick={() => handleVote('like')}
+          disabled={swiping}
+          style={{
+            width: '80px',
+            height: '80px',
+            borderRadius: '50%',
+            border: `3px solid ${theme.success}`,
+            backgroundColor: 'transparent',
+            color: theme.success,
+            fontSize: '32px',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+          }}
+        >
+          ✓
+        </button>
       </div>
-    </div>
-  );
-}
 
-function CustomerLoyalty() {
-  const [loyalty, setLoyalty] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      navigate('/customer/login?returnTo=/customer/portal');
-      return;
-    }
-    loadLoyalty();
-  }, [navigate]);
-
-  const loadLoyalty = async () => {
-    try {
-      const response = await customerAPI.getLoyalty();
-      setLoyalty(response.data.data);
-    } catch (err) {
-      console.error('Error loading loyalty:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) return <div style={{ padding: '20px' }}>Loading...</div>;
-
-  return (
-    <div style={{ padding: '20px' }}>
-      <h1>Customer Portal</h1>
-
-      <div style={{ marginTop: '20px' }}>
-        {loyalty?.loyaltyAccounts?.length === 0 ? (
-          <p>No loyalty points yet. Start making purchases!</p>
-        ) : (
-          <div>
-            <div style={{ backgroundColor: '#007bff', color: 'white', padding: '20px', borderRadius: '5px', marginBottom: '20px' }}>
-              <h2 style={{ margin: 0 }}>Total Points: {loyalty?.totalPoints || 0}</h2>
-              <p style={{ margin: '5px 0 0 0' }}>Lifetime Points: {loyalty?.totalLifetimePoints || 0}</p>
-            </div>
-
-            {/* Action Buttons */}
-            <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
-              <button
-                onClick={() => navigate('/customer/polls')}
-                style={{ flex: 1, padding: '15px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}
-              >
-                View Polls
-              </button>
-              <button
-                onClick={() => navigate('/customer/discount-hub')}
-                style={{ flex: 1, padding: '15px', backgroundColor: '#ffc107', color: '#000', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}
-              >
-                Discount Hub
-              </button>
-            </div>
-
-            {loyalty?.loyaltyAccounts?.map(account => (
-              <div key={account.id} style={{ border: '1px solid #ddd', padding: '15px', marginBottom: '10px', borderRadius: '5px' }}>
-                <h3>{account.machine_name}</h3>
-                <p>{account.location}</p>
-                <p><strong>Points Balance:</strong> {account.points_balance}</p>
-                <p><strong>Lifetime Points:</strong> {account.lifetime_points}</p>
-              </div>
-            ))}
-          </div>
-        )}
+      <div style={{ textAlign: 'center', color: theme.textMuted, fontSize: '14px', paddingBottom: '20px' }}>
+        ✗ Pass • ✓ Want it
       </div>
     </div>
   );
 }
 
 // ============================================
-// MAIN APP
+// SUGGESTIONS MANAGEMENT
+// ============================================
+
+function Suggestions() {
+  const [suggestions, setSuggestions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('pending');
+  const toast = useToast();
+
+  useEffect(() => {
+    loadSuggestions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter]);
+
+  const loadSuggestions = async () => {
+    try {
+      setLoading(true);
+      const response = await vendorAPI.getSuggestions(filter !== 'all' ? { status: filter } : {});
+      setSuggestions(response.data?.data?.suggestions || []);
+    } catch (err) {
+      console.error('Error loading suggestions:', err);
+      toast.error('Failed to load suggestions');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateStatus = async (id, status) => {
+    try {
+      await vendorAPI.updateSuggestion(id, { status });
+      toast.success(`Suggestion marked as ${status}`);
+      loadSuggestions();
+    } catch (err) {
+      toast.error('Failed to update suggestion');
+    }
+  };
+
+  const getStatusBadge = (status) => {
+    const colors = {
+      pending: { bg: theme.warning + '20', color: theme.warning },
+      reviewed: { bg: theme.primary + '20', color: theme.primary },
+      added: { bg: theme.success + '20', color: theme.success },
+      dismissed: { bg: theme.textMuted + '20', color: theme.textMuted },
+    };
+    const c = colors[status] || colors.pending;
+    return {
+      padding: '4px 12px',
+      borderRadius: '12px',
+      fontSize: '12px',
+      fontWeight: '600',
+      backgroundColor: c.bg,
+      color: c.color,
+      textTransform: 'capitalize',
+    };
+  };
+
+  if (loading) {
+    return (
+      <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p>Loading suggestions...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={styles.page}>
+      <Link to="/vendor/dashboard" style={{ ...styles.link, display: 'inline-block', marginBottom: '24px' }}>
+        ← Back to Dashboard
+      </Link>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <div>
+          <h1 style={{ margin: '0 0 8px 0' }}>💡 Product Suggestions</h1>
+          <p style={{ color: theme.textSecondary, margin: 0 }}>
+            Customer suggestions from QR code polls
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {['pending', 'reviewed', 'added', 'dismissed', 'all'].map(status => (
+            <button
+              key={status}
+              onClick={() => setFilter(status)}
+              style={{
+                ...styles.button,
+                padding: '8px 16px',
+                fontSize: '14px',
+                backgroundColor: filter === status ? theme.primary : theme.surfaceHover,
+                textTransform: 'capitalize',
+              }}
+            >
+              {status}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {suggestions.length === 0 ? (
+        <div style={{ ...styles.card, textAlign: 'center', padding: '48px' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📭</div>
+          <p style={{ color: theme.textSecondary }}>
+            {filter === 'all' ? 'No suggestions yet.' : `No ${filter} suggestions.`}
+          </p>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: '16px' }}>
+          {suggestions.map(suggestion => (
+            <div key={suggestion.id} style={styles.card}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
+                <div>
+                  <h3 style={{ margin: '0 0 8px 0' }}>"{suggestion.suggestion_text}"</h3>
+                  <p style={{ color: theme.textMuted, margin: 0, fontSize: '14px' }}>
+                    From: {suggestion.machine_name} • {new Date(suggestion.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+                <span style={getStatusBadge(suggestion.status)}>{suggestion.status}</span>
+              </div>
+
+              {suggestion.status === 'pending' && (
+                <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+                  <button
+                    onClick={() => handleUpdateStatus(suggestion.id, 'reviewed')}
+                    style={{ ...styles.button, ...styles.buttonSecondary, flex: 1, fontSize: '14px' }}
+                  >
+                    Mark Reviewed
+                  </button>
+                  <button
+                    onClick={() => handleUpdateStatus(suggestion.id, 'added')}
+                    style={{ ...styles.button, ...styles.buttonSuccess, flex: 1, fontSize: '14px' }}
+                  >
+                    Added to Machine
+                  </button>
+                  <button
+                    onClick={() => handleUpdateStatus(suggestion.id, 'dismissed')}
+                    style={{ ...styles.button, backgroundColor: theme.textMuted, flex: 1, fontSize: '14px' }}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// EXPIRING PRODUCTS
+// ============================================
+
+function ExpiringProducts() {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [days, setDays] = useState(14);
+  const toast = useToast();
+
+  useEffect(() => {
+    loadExpiringProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [days]);
+
+  const loadExpiringProducts = async () => {
+    try {
+      setLoading(true);
+      const response = await vendorAPI.getExpiringProducts(days);
+      setProducts(response.data?.data?.products || []);
+    } catch (err) {
+      console.error('Error loading expiring products:', err);
+      toast.error('Failed to load expiring products');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateExpiration = async (machineId, inventoryId, newDate) => {
+    try {
+      await vendorAPI.updateExpirationDate(machineId, inventoryId, newDate);
+      toast.success('Expiration date updated');
+      loadExpiringProducts();
+    } catch (err) {
+      toast.error('Failed to update expiration date');
+    }
+  };
+
+  const getDaysUntil = (date) => {
+    const now = new Date();
+    const expDate = new Date(date);
+    const diffTime = expDate - now;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
+  const getUrgencyColor = (daysLeft) => {
+    if (daysLeft <= 3) return theme.danger;
+    if (daysLeft <= 7) return theme.warning;
+    return theme.textSecondary;
+  };
+
+  if (loading) {
+    return (
+      <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p>Loading expiring products...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={styles.page}>
+      <Link to="/vendor/dashboard" style={{ ...styles.link, display: 'inline-block', marginBottom: '24px' }}>
+        ← Back to Dashboard
+      </Link>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <div>
+          <h1 style={{ margin: '0 0 8px 0' }}>⏰ Expiring Products</h1>
+          <p style={{ color: theme.textSecondary, margin: 0 }}>
+            Products expiring within {days} days across all machines
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <label style={{ color: theme.textSecondary }}>Show next:</label>
+          <select
+            value={days}
+            onChange={(e) => setDays(parseInt(e.target.value))}
+            style={{ ...styles.input, width: 'auto', padding: '8px 16px' }}
+          >
+            <option value="7">7 days</option>
+            <option value="14">14 days</option>
+            <option value="30">30 days</option>
+            <option value="60">60 days</option>
+          </select>
+        </div>
+      </div>
+
+      {products.length === 0 ? (
+        <div style={{ ...styles.card, textAlign: 'center', padding: '48px' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>✓</div>
+          <h2 style={{ margin: '0 0 8px 0' }}>No Expiring Products</h2>
+          <p style={{ color: theme.textSecondary, margin: 0 }}>
+            No products are expiring within the next {days} days.
+          </p>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: '16px' }}>
+          {products.map(product => {
+            const daysLeft = getDaysUntil(product.expiration_date);
+            const urgencyColor = getUrgencyColor(daysLeft);
+
+            return (
+              <div key={`${product.machine_id}-${product.inventory_id}`} style={{
+                ...styles.card,
+                borderLeft: `4px solid ${urgencyColor}`
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                  <div>
+                    <h3 style={{ margin: '0 0 8px 0' }}>{product.product_name}</h3>
+                    <p style={{ color: theme.textMuted, margin: '0 0 4px 0', fontSize: '14px' }}>
+                      📍 {product.machine_name} • Stock: {product.current_stock}
+                    </p>
+                    <p style={{ color: urgencyColor, margin: 0, fontSize: '14px', fontWeight: '600' }}>
+                      {daysLeft <= 0 ? 'EXPIRED' : `Expires in ${daysLeft} days`} ({new Date(product.expiration_date).toLocaleDateString()})
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      type="date"
+                      defaultValue={product.expiration_date?.split('T')[0]}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          handleUpdateExpiration(product.machine_id, product.inventory_id, e.target.value);
+                        }
+                      }}
+                      style={{ ...styles.input, width: 'auto', padding: '8px' }}
+                    />
+                    <Link
+                      to={`/vendor/machines/${product.machine_id}`}
+                      style={{ ...styles.button, textDecoration: 'none', padding: '8px 16px', fontSize: '14px' }}
+                    >
+                      View Machine
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Tips */}
+      <div style={{ ...styles.card, marginTop: '24px', backgroundColor: theme.warning + '10', borderLeft: `4px solid ${theme.warning}` }}>
+        <h3 style={{ margin: '0 0 8px 0', color: theme.warning }}>💡 Tips for Managing Expiring Products</h3>
+        <ul style={{ margin: 0, paddingLeft: '20px', color: theme.textSecondary, lineHeight: '1.8' }}>
+          <li>Move expiring products to higher-traffic machines</li>
+          <li>Consider promotional pricing for products nearing expiration</li>
+          <li>Use the Route Plan to optimize redistribution</li>
+          <li>Update expiration dates when restocking</li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// HOME & APP
 // ============================================
 
 function Home() {
   return (
-    <div style={{ textAlign: 'center', padding: '50px' }}>
-      <h1>Vending Machine Platform</h1>
-      <p>Choose your portal:</p>
-      <div style={{ marginTop: '30px' }}>
-        <Link to="/vendor/login" style={{ display: 'inline-block', padding: '15px 30px', margin: '10px', backgroundColor: '#007bff', color: 'white', textDecoration: 'none', borderRadius: '5px' }}>
-          Vendor Portal
-        </Link>
-        <Link to="/customer/login" style={{ display: 'inline-block', padding: '15px 30px', margin: '10px', backgroundColor: '#28a745', color: 'white', textDecoration: 'none', borderRadius: '5px' }}>
-          Customer Portal
-        </Link>
+    <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+      <div>
+        <h1 style={{ fontSize: '48px', margin: '0 0 16px 0' }}>
+          <span style={{ color: theme.primary }}>IDDI</span>
+        </h1>
+        <p style={{ color: theme.textSecondary, fontSize: '18px', margin: '0 0 48px 0' }}>
+          Vending Machine Planogram Management
+        </p>
+
+        <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
+          <Link to="/vendor/login" style={{
+            ...styles.button,
+            textDecoration: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '16px 32px',
+            fontSize: '16px'
+          }}>
+            📊 Vendor Portal
+          </Link>
+        </div>
+
+        <p style={{ color: theme.textMuted, marginTop: '48px', fontSize: '14px' }}>
+          Customers: Scan the QR code on any machine to vote
+        </p>
       </div>
     </div>
   );
@@ -2137,29 +3067,32 @@ function Home() {
 
 function App() {
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<Home />} />
+    <ToastProvider>
+      <Router>
+        <Routes>
+          <Route path="/" element={<Home />} />
 
-        {/* Vendor Routes */}
-        <Route path="/vendor/login" element={<VendorLogin />} />
-        <Route path="/vendor/dashboard" element={<VendorDashboard />} />
-        <Route path="/vendor/machines/:id" element={<MachineDetails />} />
-        <Route path="/vendor/polls/:pollId/results" element={<PollResults />} />
+          {/* Vendor Routes */}
+          <Route path="/vendor/login" element={<VendorLogin />} />
+          <Route path="/vendor/verify-email" element={<EmailVerification />} />
+          <Route path="/vendor/forgot-password" element={<ForgotPassword />} />
+          <Route path="/vendor/reset-password" element={<ResetPassword />} />
+          <Route path="/vendor/dashboard" element={<VendorDashboard />} />
+          <Route path="/vendor/machines/:id" element={<MachineDetails />} />
+          <Route path="/vendor/polls/:pollId/results" element={<PollResults />} />
+          <Route path="/vendor/top-products" element={<TopProducts />} />
+          <Route path="/vendor/route-plan" element={<RoutePlan />} />
+          <Route path="/vendor/suggestions" element={<Suggestions />} />
+          <Route path="/vendor/expiring" element={<ExpiringProducts />} />
 
-        {/* Customer Routes */}
-        <Route path="/customer/login" element={<CustomerLogin />} />
-        <Route path="/customer/scan" element={<CustomerQRScan />} />
-        <Route path="/customer/machine/:qr_token" element={<CustomerMachine />} />
-        <Route path="/customer/polls" element={<CustomerPolls />} />
-        <Route path="/customer/loyalty" element={<CustomerLoyalty />} />
-        <Route path="/customer/portal" element={<CustomerLoyalty />} />
-        <Route path="/customer/discount-hub" element={<DiscountHub />} />
+          {/* Customer Routes (Anonymous) */}
+          <Route path="/customer/machine/:qr_token" element={<CustomerMachine />} />
 
-        {/* Default redirect */}
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
-    </Router>
+          {/* Default redirect */}
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </Router>
+    </ToastProvider>
   );
 }
 

@@ -12,28 +12,17 @@ const api = axios.create({
 // Add token to requests if it exists
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
-  console.log('=== API INTERCEPTOR ===');
-  console.log('Request URL:', config.baseURL + config.url);
-  console.log('Token in localStorage:', token ? token.substring(0, 20) + '...' : 'NO TOKEN FOUND');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
-    console.log('Authorization header set:', config.headers.Authorization.substring(0, 30) + '...');
-  } else {
-    console.warn('⚠️ NO TOKEN - Request will fail if auth is required');
   }
   return config;
 });
 
-// Add response interceptor for better error logging
+// Response interceptor for error handling
 api.interceptors.response.use(
-  (response) => {
-    console.log('✅ API Response Success:', response.config.url, response.status);
-    return response;
-  },
+  (response) => response,
   (error) => {
-    console.error('❌ API Response Error:', error.config?.url);
-    console.error('Error status:', error.response?.status);
-    console.error('Error message:', error.response?.data?.message);
+    console.error('API Error:', error.response?.status, error.response?.data?.message);
     return Promise.reject(error);
   }
 );
@@ -42,9 +31,10 @@ api.interceptors.response.use(
 export const authAPI = {
   vendorRegister: (data) => api.post('/auth/vendor/register', data),
   vendorLogin: (data) => api.post('/auth/vendor/login', data),
-  customerRegister: (data) => api.post('/auth/customer/register', data),
-  customerLogin: (data) => api.post('/auth/customer/login', data),
-  customerQRLogin: (data) => api.post('/auth/customer/qr-login', data),
+  verifyEmail: (data) => api.post('/auth/vendor/verify-email', data),
+  resendVerification: (data) => api.post('/auth/vendor/resend-verification', data),
+  forgotPassword: (data) => api.post('/auth/vendor/forgot-password', data),
+  resetPassword: (data) => api.post('/auth/vendor/reset-password', data),
   verify: () => api.get('/auth/verify'),
 };
 
@@ -65,51 +55,68 @@ export const vendorAPI = {
   updateProduct: (id, data) => api.put(`/vendor/products/${id}`, data),
   deleteProduct: (id) => api.delete(`/vendor/products/${id}`),
 
-  // Inventory
+  // Inventory (Planogram)
   getMachineInventory: (machineId) => api.get(`/vendor/machines/${machineId}/inventory`),
   addToInventory: (machineId, data) => api.post(`/vendor/machines/${machineId}/inventory`, data),
   updateInventory: (machineId, id, data) => api.put(`/vendor/machines/${machineId}/inventory/${id}`, data),
   removeFromInventory: (machineId, id) => api.delete(`/vendor/machines/${machineId}/inventory/${id}`),
 
-  // Discounts
-  getMachineDiscounts: (machineId) => api.get(`/vendor/machines/${machineId}/discounts`),
-  createDiscount: (machineId, data) => api.post(`/vendor/machines/${machineId}/discounts`, data),
-  deleteDiscount: (machineId, discountId) => api.delete(`/vendor/machines/${machineId}/discounts/${discountId}`),
+  // Performance tracking
+  setPerformance: (machineId, inventoryId, data) =>
+    api.put(`/vendor/machines/${machineId}/inventory/${inventoryId}/performance`, data),
+  getPerformanceComparison: (productId) =>
+    api.get(`/vendor/performance-comparison?productId=${productId}`),
 
-  // Polls
+  // Top 50 Products
+  getTopProducts: () => api.get('/vendor/top-products'),
+
+  // Swipe Polls
   getMachinePolls: (machineId) => api.get(`/vendor/machines/${machineId}/polls`),
   createPoll: (machineId, data) => api.post(`/vendor/machines/${machineId}/polls`, data),
   getPollResults: (pollId) => api.get(`/vendor/polls/${pollId}/results`),
+  getSwipeResults: (machineId) => api.get(`/vendor/machines/${machineId}/swipe-results`),
+
+  // Product Redistribution
+  getRedistributionTargets: (machineId, productId) =>
+    api.get(`/vendor/machines/${machineId}/redistribution-targets?productId=${productId}`),
+  executeRedistribution: (data) => api.post('/vendor/redistribution', data),
+  getRedistributionHistory: (machineId, limit = 50) =>
+    api.get(`/vendor/redistribution-history?machineId=${machineId}&limit=${limit}`),
+
+  // Route Plan - Global redistribution view
+  getRedistributionPlan: () => api.get('/vendor/redistribution-plan'),
+
+  // Machine Notes
+  updateMachineNotes: (machineId, notes) =>
+    api.put(`/vendor/machines/${machineId}/notes`, { notes }),
+
+  // Product Suggestions
+  getSuggestions: (params = {}) => {
+    const queryParams = new URLSearchParams(params).toString();
+    return api.get(`/vendor/suggestions${queryParams ? '?' + queryParams : ''}`);
+  },
+  updateSuggestion: (id, data) => api.put(`/vendor/suggestions/${id}`, data),
+
+  // Expiration Tracking
+  getExpiringProducts: (days = 14) =>
+    api.get(`/vendor/expiring-products?days=${days}`),
+  updateExpirationDate: (machineId, inventoryId, expirationDate) =>
+    api.put(`/vendor/machines/${machineId}/inventory/${inventoryId}/expiration`, { expirationDate }),
 };
 
-// Customer API
+// Customer API (Anonymous)
 export const customerAPI = {
-  // Machine & Products
+  // Machine session
   setMachine: (data) => api.post('/customer/set-machine', data),
   getMachine: () => api.get('/customer/machine'),
 
-  // Polls
+  // Swipe Polls
   getPolls: () => api.get('/customer/polls'),
   votePoll: (pollId, data) => api.post(`/customer/polls/${pollId}/vote`, data),
+  getPollResults: (pollId) => api.get(`/customer/polls/${pollId}/results`),
 
-  // Rebates
-  getRebates: () => api.get('/customer/rebates'),
-  submitRebate: (data) => api.post('/customer/rebates', data),
-
-  // Loyalty
-  getLoyalty: () => api.get('/customer/loyalty'),
-  getMachineLoyalty: (machineId) => api.get(`/customer/loyalty/${machineId}`),
-  submitPoints: (data) => api.post('/customer/loyalty/submit', data),
-
-  // Discounts
-  getMachineDiscounts: (machineId) => api.get(`/customer/machine/discounts${machineId ? `?machineId=${machineId}` : ''}`),
-  redeemDiscount: (data) => api.post('/customer/discounts/redeem', data),
-  submitRedemption: (formData) => api.post('/customer/redemptions/submit', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  }),
-
-  // Profile
-  getProfile: () => api.get('/customer/profile'),
+  // Product Suggestions
+  submitSuggestion: (suggestion) => api.post('/customer/suggestions', { suggestion }),
 };
 
 // Public API (no auth)
