@@ -1,3 +1,16 @@
 # https://www.robotstxt.org/robotstxt.html
 User-agent: *
-Disallow:
+Allow: /
+
+# Sitemap location
+Sitemap: https://vending-front-end.vercel.app/sitemap.xml
+
+# Disallow private routes (these require authentication)
+Disallow: /vendor/
+Disallow: /customer/machine/
+Disallow: /api/
+
+# Allow crawlers to access public pages
+Allow: /login
+Allow: /register
+Allow: /$
