@@ -102,6 +102,7 @@ const theme = {
   border: '#2a2a2a',
   primary: '#8b5cf6',
   primaryHover: '#7c3aed',
+  secondary: '#06b6d4', // Cyan color for discovery polls
   success: '#22c55e',
   danger: '#ef4444',
   warning: '#f59e0b',
@@ -1420,6 +1421,8 @@ function MachineDetails() {
                 <button
                   onClick={() => handleRemoveProduct(item.id)}
                   style={{ background: 'none', border: 'none', color: theme.danger, cursor: 'pointer', fontSize: '18px' }}
+                  aria-label={`Remove ${item.product_name} from machine`}
+                  title="Remove product"
                 >
                   ×
                 </button>
@@ -1890,6 +1893,8 @@ function SwipePollForm({ machineId, onSuccess }) {
               type="button"
               onClick={() => handleRemoveProduct(index)}
               style={{ ...styles.button, ...styles.buttonDanger, padding: '10px 14px' }}
+              aria-label={`Remove product ${index + 1}`}
+              title="Remove product"
             >
               ×
             </button>
@@ -2072,7 +2077,7 @@ function TopProducts() {
               </div>
 
               {product.image_url && (
-                <img src={product.image_url} alt="" style={{ width: '50px', height: '50px', borderRadius: '8px', objectFit: 'cover' }} />
+                <img src={product.image_url} alt={product.product_name} style={{ width: '50px', height: '50px', borderRadius: '8px', objectFit: 'cover' }} />
               )}
 
               <div style={{ flex: 1 }}>
@@ -2680,7 +2685,7 @@ function CustomerSwipe() {
       </div>
 
       {/* Action Buttons */}
-      <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', padding: '24px 0' }}>
+      <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', padding: '24px 0' }} role="group" aria-label="Vote on product">
         <button
           onClick={() => handleVote('dislike')}
           disabled={swiping}
@@ -2695,6 +2700,8 @@ function CustomerSwipe() {
             cursor: 'pointer',
             transition: 'all 0.2s',
           }}
+          aria-label="Pass on this product"
+          title="Pass"
         >
           ✗
         </button>
@@ -2712,6 +2719,8 @@ function CustomerSwipe() {
             cursor: 'pointer',
             transition: 'all 0.2s',
           }}
+          aria-label="Want this product"
+          title="Want it"
         >
           ✓
         </button>
