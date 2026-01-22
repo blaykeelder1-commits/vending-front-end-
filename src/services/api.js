@@ -31,6 +31,7 @@ api.interceptors.response.use(
 export const authAPI = {
   vendorRegister: (data) => api.post('/auth/vendor/register', data),
   vendorLogin: (data) => api.post('/auth/vendor/login', data),
+  vendorGoogleLogin: (data) => api.post('/auth/vendor/google', data),
   verifyEmail: (data) => api.post('/auth/vendor/verify-email', data),
   resendVerification: (data) => api.post('/auth/vendor/resend-verification', data),
   forgotPassword: (data) => api.post('/auth/vendor/forgot-password', data),
