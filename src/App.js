@@ -3201,6 +3201,73 @@ function Home() {
   );
 }
 
+// ============================================
+// PROTECTED ROUTE COMPONENT
+// ============================================
+function ProtectedRoute({ children }) {
+  const [isAuthenticated, setIsAuthenticated] = useState(null);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const token = localStorage.getItem('token');
+      const userType = localStorage.getItem('userType');
+
+      if (!token || userType !== 'vendor') {
+        localStorage.removeItem('token');
+        localStorage.removeItem('userType');
+        setIsAuthenticated(false);
+        return;
+      }
+
+      try {
+        // Verify token with backend
+        await authAPI.verify();
+        setIsAuthenticated(true);
+      } catch (error) {
+        console.error('Auth verification failed:', error);
+        localStorage.removeItem('token');
+        localStorage.removeItem('userType');
+        setIsAuthenticated(false);
+      }
+    };
+
+    checkAuth();
+  }, []);
+
+  // Show loading state while checking auth
+  if (isAuthenticated === null) {
+    return (
+      <div style={{
+        ...styles.page,
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            width: '40px',
+            height: '40px',
+            border: `3px solid ${theme.border}`,
+            borderTopColor: theme.primary,
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto 16px'
+          }} />
+          <p style={{ color: theme.textSecondary }}>Verifying authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Redirect to login if not authenticated
+  if (!isAuthenticated) {
+    return <Navigate to="/vendor/login" replace />;
+  }
+
+  return children;
+}
+
 function App() {
   return (
     <ToastProvider>
@@ -3208,18 +3275,20 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
 
-          {/* Vendor Routes */}
+          {/* Vendor Auth Routes (Public) */}
           <Route path="/vendor/login" element={<VendorLogin />} />
           <Route path="/vendor/verify-email" element={<EmailVerification />} />
           <Route path="/vendor/forgot-password" element={<ForgotPassword />} />
           <Route path="/vendor/reset-password" element={<ResetPassword />} />
-          <Route path="/vendor/dashboard" element={<VendorDashboard />} />
-          <Route path="/vendor/machines/:id" element={<MachineDetails />} />
-          <Route path="/vendor/polls/:pollId/results" element={<PollResults />} />
-          <Route path="/vendor/top-products" element={<TopProducts />} />
-          <Route path="/vendor/route-plan" element={<RoutePlan />} />
-          <Route path="/vendor/suggestions" element={<Suggestions />} />
-          <Route path="/vendor/expiring" element={<ExpiringProducts />} />
+
+          {/* Vendor Protected Routes */}
+          <Route path="/vendor/dashboard" element={<ProtectedRoute><VendorDashboard /></ProtectedRoute>} />
+          <Route path="/vendor/machines/:id" element={<ProtectedRoute><MachineDetails /></ProtectedRoute>} />
+          <Route path="/vendor/polls/:pollId/results" element={<ProtectedRoute><PollResults /></ProtectedRoute>} />
+          <Route path="/vendor/top-products" element={<ProtectedRoute><TopProducts /></ProtectedRoute>} />
+          <Route path="/vendor/route-plan" element={<ProtectedRoute><RoutePlan /></ProtectedRoute>} />
+          <Route path="/vendor/suggestions" element={<ProtectedRoute><Suggestions /></ProtectedRoute>} />
+          <Route path="/vendor/expiring" element={<ProtectedRoute><ExpiringProducts /></ProtectedRoute>} />
 
           {/* Customer Routes (Anonymous) */}
           <Route path="/customer/machine/:qr_token" element={<CustomerMachine />} />

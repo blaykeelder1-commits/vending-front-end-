@@ -22,7 +22,49 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.error('API Error:', error.response?.status, error.response?.data?.message);
+    // Handle network errors (no response)
+    if (!error.response) {
+      console.error('Network Error:', error.message);
+      error.userMessage = 'Unable to connect to server. Please check your internet connection.';
+      return Promise.reject(error);
+    }
+
+    const status = error.response.status;
+    const message = error.response.data?.message || 'An error occurred';
+
+    console.error('API Error:', status, message);
+
+    // Handle 401 Unauthorized - clear auth and redirect to login
+    if (status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('userType');
+      error.userMessage = 'Session expired. Please log in again.';
+
+      // Only redirect if not already on login/auth pages
+      const currentPath = window.location.pathname;
+      if (!currentPath.includes('/login') && !currentPath.includes('/verify-email') && !currentPath.includes('/reset-password')) {
+        window.location.href = '/vendor/login';
+      }
+    }
+
+    // Handle 403 Forbidden
+    if (status === 403) {
+      error.userMessage = 'You do not have permission to perform this action.';
+    }
+
+    // Handle 404 Not Found
+    if (status === 404) {
+      error.userMessage = message || 'The requested resource was not found.';
+    }
+
+    // Handle 500 Server Error
+    if (status >= 500) {
+      error.userMessage = 'Server error. Please try again later.';
+    }
+
+    // Use server message if available, otherwise use our custom message
+    error.userMessage = error.userMessage || message;
+
     return Promise.reject(error);
   }
 );
