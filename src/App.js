@@ -847,7 +847,7 @@ function VendorDashboard() {
         setPendingSuggestions(suggestions.length);
       }
     } catch (err) {
-      console.error('Error loading data:', err);
+      toast.error('Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
@@ -1219,12 +1219,7 @@ function MachineDetails() {
   const [notesChanged, setNotesChanged] = useState(false);
   const toast = useToast();
 
-  useEffect(() => {
-    loadMachineData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
-
-  const loadMachineData = async () => {
+  const loadMachineData = useCallback(async () => {
     try {
       setLoading(true);
       const [machineRes, inventoryRes, productsRes, pollsRes] = await Promise.allSettled([
@@ -1259,11 +1254,15 @@ function MachineDetails() {
         setPolls(pollsRes.value.data.data.polls || []);
       }
     } catch (err) {
-      console.error('Error loading machine:', err);
+      toast.error('Failed to load machine data');
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, toast]);
+
+  useEffect(() => {
+    loadMachineData();
+  }, [loadMachineData]);
 
   const handleAddProduct = async (e) => {
     e.preventDefault();
@@ -1359,7 +1358,7 @@ function MachineDetails() {
       const response = await vendorAPI.getRedistributionTargets(id, item.product_id);
       setRedistributionTargets(response.data?.data?.targetMachines || []);
     } catch (err) {
-      console.error('Error loading redistribution targets:', err);
+      toast.error('Failed to load redistribution targets');
       setRedistributionTargets([]);
     } finally {
       setRedistributionLoading(false);
@@ -2045,22 +2044,22 @@ function PollResults() {
   const { pollId } = useParams();
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
 
-  useEffect(() => {
-    loadResults();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pollId]);
-
-  const loadResults = async () => {
+  const loadResults = useCallback(async () => {
     try {
       const response = await vendorAPI.getPollResults(pollId);
       setResults(response.data.data);
     } catch (err) {
-      console.error('Error loading results:', err);
+      toast.error('Failed to load poll results');
     } finally {
       setLoading(false);
     }
-  };
+  }, [pollId, toast]);
+
+  useEffect(() => {
+    loadResults();
+  }, [loadResults]);
 
   if (loading) return <div style={styles.page}><p>Loading...</p></div>;
   if (!results) return <div style={styles.page}><p>Poll not found.</p></div>;
@@ -2145,9 +2144,11 @@ function PollResults() {
 function TopProducts() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const toast = useToast();
 
   useEffect(() => {
     loadTopProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadTopProducts = async () => {
@@ -2155,7 +2156,7 @@ function TopProducts() {
       const response = await vendorAPI.getTopProducts();
       setProducts(response.data.data.topProducts);
     } catch (err) {
-      console.error('Error loading top products:', err);
+      toast.error('Failed to load top products');
     } finally {
       setLoading(false);
     }
@@ -2240,10 +2241,12 @@ function RoutePlan() {
   const [selectedStop, setSelectedStop] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
   const location = useLocation();
+  const toast = useToast();
 
   // Reload data whenever the page is navigated to (using location.key)
   useEffect(() => {
     loadRoutePlan();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.key]);
 
   const loadRoutePlan = async () => {
@@ -2253,7 +2256,7 @@ function RoutePlan() {
       setRouteData(response.data.data);
       setLastUpdated(new Date());
     } catch (err) {
-      console.error('Error loading route plan:', err);
+      toast.error('Failed to load route plan');
     } finally {
       setLoading(false);
     }
@@ -2542,7 +2545,6 @@ function CustomerMachine() {
 
         setLoading(false);
       } catch (err) {
-        console.error('Error:', err);
         setError(err.response?.data?.message || 'Failed to access machine');
         setLoading(false);
       }
@@ -2622,7 +2624,7 @@ function CustomerSwipe() {
         setProducts(data.products);
       }
     } catch (err) {
-      console.error('Error loading polls:', err);
+      toast.error('Failed to load polls');
       setCompleted(true);
     } finally {
       setLoading(false);
@@ -2881,7 +2883,6 @@ function Suggestions() {
       const response = await vendorAPI.getSuggestions(filter !== 'all' ? { status: filter } : {});
       setSuggestions(response.data?.data?.suggestions || []);
     } catch (err) {
-      console.error('Error loading suggestions:', err);
       toast.error('Failed to load suggestions');
     } finally {
       setLoading(false);
@@ -3018,23 +3019,21 @@ function ExpiringProducts() {
   const [days, setDays] = useState(14);
   const toast = useToast();
 
-  useEffect(() => {
-    loadExpiringProducts();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [days]);
-
-  const loadExpiringProducts = async () => {
+  const loadExpiringProducts = useCallback(async () => {
     try {
       setLoading(true);
       const response = await vendorAPI.getExpiringProducts(days);
       setProducts(response.data?.data?.products || []);
     } catch (err) {
-      console.error('Error loading expiring products:', err);
       toast.error('Failed to load expiring products');
     } finally {
       setLoading(false);
     }
-  };
+  }, [days, toast]);
+
+  useEffect(() => {
+    loadExpiringProducts();
+  }, [loadExpiringProducts]);
 
   const handleUpdateExpiration = async (machineId, inventoryId, newDate) => {
     try {
@@ -3224,7 +3223,6 @@ function ProtectedRoute({ children }) {
         await authAPI.verify();
         setIsAuthenticated(true);
       } catch (error) {
-        console.error('Auth verification failed:', error);
         localStorage.removeItem('token');
         localStorage.removeItem('userType');
         setIsAuthenticated(false);
