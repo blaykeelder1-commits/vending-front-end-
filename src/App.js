@@ -2144,6 +2144,8 @@ function PollResults() {
 function TopProducts() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
   const toast = useToast();
 
   useEffect(() => {
@@ -2155,11 +2157,31 @@ function TopProducts() {
     try {
       const response = await vendorAPI.getTopProducts();
       setProducts(response.data.data.topProducts);
+      setLastUpdated(response.data.data.lastUpdated);
     } catch (err) {
       toast.error('Failed to load top products');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    loadTopProducts();
+  };
+
+  const formatLastUpdated = (timestamp) => {
+    if (!timestamp) return 'Calculating...';
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+    return date.toLocaleDateString();
   };
 
   if (loading) return <div style={styles.page}><p>Loading...</p></div>;
@@ -2170,10 +2192,30 @@ function TopProducts() {
         ← Back to Dashboard
       </Link>
 
-      <h1 style={{ margin: '0 0 8px 0' }}>🏆 Top 50 Products</h1>
-      <p style={{ color: theme.textSecondary, margin: '0 0 32px 0' }}>
-        Most popular products across all vendors based on performance ratings
-      </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+        <div>
+          <h1 style={{ margin: '0 0 8px 0' }}>Top 50 Products</h1>
+          <p style={{ color: theme.textSecondary, margin: 0 }}>
+            Most popular products across all vendors based on weighted performance ratings
+          </p>
+          <p style={{ color: theme.textMuted, margin: '4px 0 0 0', fontSize: '13px' }}>
+            Last updated: {formatLastUpdated(lastUpdated)}
+          </p>
+        </div>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          style={{
+            ...styles.buttonSecondary,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            opacity: refreshing ? 0.6 : 1,
+          }}
+        >
+          {refreshing ? 'Refreshing...' : 'Refresh'}
+        </button>
+      </div>
 
       {products.length === 0 ? (
         <div style={{ ...styles.card, textAlign: 'center', padding: '48px' }}>
@@ -2201,7 +2243,7 @@ function TopProducts() {
                 backgroundColor: index < 3 ? theme.warning + '20' : theme.surfaceHover,
                 color: index < 3 ? theme.warning : theme.textSecondary
               }}>
-                {index + 1}
+                {product.rank_position || index + 1}
               </div>
 
               {product.image_url && (
@@ -2212,6 +2254,11 @@ function TopProducts() {
                 <h4 style={{ margin: 0 }}>{product.product_name}</h4>
                 <p style={{ color: theme.textMuted, margin: 0, fontSize: '14px' }}>
                   In {product.total_machines} machines
+                  {product.unique_vendors > 0 && (
+                    <span style={{ marginLeft: '8px', color: theme.primary }}>
+                      • Rated by {product.unique_vendors} vendor{product.unique_vendors !== 1 ? 's' : ''}
+                    </span>
+                  )}
                 </p>
               </div>
 
@@ -2220,7 +2267,7 @@ function TopProducts() {
                   {product.yes_count}
                 </div>
                 <div style={{ color: theme.textMuted, fontSize: '12px' }}>
-                  performing ({product.performance_percentage}%)
+                  performing ({product.performance_percentage || 0}%)
                 </div>
               </div>
             </div>
