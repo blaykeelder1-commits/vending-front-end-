@@ -18,10 +18,27 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Response interceptor for error handling
+// Track whether a token refresh is in progress to avoid multiple simultaneous refreshes
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach(({ resolve, reject }) => {
+    if (error) {
+      reject(error);
+    } else {
+      resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
+// Response interceptor for error handling and automatic token refresh
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config;
+
     // Handle network errors (no response)
     if (!error.response) {
       console.error('Network Error:', error.message);
@@ -32,11 +49,54 @@ api.interceptors.response.use(
     const status = error.response.status;
     const message = error.response.data?.message || 'An error occurred';
 
+    // Attempt token refresh on 401, but not for auth endpoints or already-retried requests
+    if (status === 401 && !originalRequest._retry && !originalRequest.url.includes('/auth/')) {
+      const refreshToken = localStorage.getItem('refreshToken');
+      if (refreshToken) {
+        if (isRefreshing) {
+          // Queue this request until refresh completes
+          return new Promise((resolve, reject) => {
+            failedQueue.push({ resolve, reject });
+          }).then((token) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            return api(originalRequest);
+          });
+        }
+
+        originalRequest._retry = true;
+        isRefreshing = true;
+
+        try {
+          const res = await api.post('/auth/refresh', { refreshToken });
+          const { accessToken, refreshToken: newRefreshToken } = res.data.data;
+          localStorage.setItem('token', accessToken);
+          localStorage.setItem('refreshToken', newRefreshToken);
+          api.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
+          processQueue(null, accessToken);
+          originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+          return api(originalRequest);
+        } catch (refreshError) {
+          processQueue(refreshError, null);
+          localStorage.removeItem('token');
+          localStorage.removeItem('refreshToken');
+          localStorage.removeItem('userType');
+          const currentPath = window.location.pathname;
+          if (!currentPath.includes('/login') && !currentPath.includes('/verify-email') && !currentPath.includes('/reset-password')) {
+            window.location.href = '/vendor/login';
+          }
+          return Promise.reject(refreshError);
+        } finally {
+          isRefreshing = false;
+        }
+      }
+    }
+
     console.error('API Error:', status, message);
 
     // Handle 401 Unauthorized - clear auth and redirect to login
     if (status === 401) {
       localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
       localStorage.removeItem('userType');
       error.userMessage = 'Session expired. Please log in again.';
 

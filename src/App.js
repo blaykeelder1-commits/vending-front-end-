@@ -177,6 +177,7 @@ function VendorLogin() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleError, setGoogleError] = useState('');
   const [needsVerification, setNeedsVerification] = useState(false);
   const navigate = useNavigate();
   const googleButtonRef = useRef(null);
@@ -186,8 +187,9 @@ function VendorLogin() {
     setGoogleLoading(true);
     try {
       const result = await authAPI.vendorGoogleLogin({ credential: response.credential });
-      const token = result.data.data.token;
+      const { token, refreshToken } = result.data.data;
       localStorage.setItem('token', token);
+      if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
       localStorage.setItem('userType', 'vendor');
       navigate('/vendor/dashboard');
     } catch (err) {
@@ -199,10 +201,16 @@ function VendorLogin() {
 
   // Initialize Google Sign-In
   useEffect(() => {
+    const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
+    if (!clientId || clientId === 'your_google_client_id_here') {
+      setGoogleError('Google Sign-In not configured');
+      return;
+    }
+
     const initializeGoogleSignIn = () => {
-      if (window.google && process.env.REACT_APP_GOOGLE_CLIENT_ID && process.env.REACT_APP_GOOGLE_CLIENT_ID !== 'your_google_client_id_here') {
+      try {
         window.google.accounts.id.initialize({
-          client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID,
+          client_id: clientId,
           callback: handleGoogleCallback,
         });
         if (googleButtonRef.current) {
@@ -213,24 +221,37 @@ function VendorLogin() {
             text: 'continue_with',
           });
         }
+        setGoogleError('');
+      } catch (err) {
+        console.error('Google Sign-In init failed:', err);
+        setGoogleError('Google Sign-In failed to initialize');
       }
     };
 
-    // Check if Google script is already loaded
+    // Poll for Google script with increasing intervals, up to 15 seconds
+    let attempts = 0;
+    const maxAttempts = 30;
+    const poll = () => {
+      if (window.google) {
+        initializeGoogleSignIn();
+        return;
+      }
+      attempts++;
+      if (attempts >= maxAttempts) {
+        setGoogleError('Google Sign-In failed to load. Check your connection.');
+        return;
+      }
+      timerId = setTimeout(poll, 500);
+    };
+
+    let timerId = null;
     if (window.google) {
       initializeGoogleSignIn();
     } else {
-      // Wait for script to load
-      const checkGoogle = setInterval(() => {
-        if (window.google) {
-          clearInterval(checkGoogle);
-          initializeGoogleSignIn();
-        }
-      }, 100);
-
-      // Clean up interval after 5 seconds if Google doesn't load
-      setTimeout(() => clearInterval(checkGoogle), 5000);
+      timerId = setTimeout(poll, 500);
     }
+
+    return () => { if (timerId) clearTimeout(timerId); };
   }, [handleGoogleCallback]);
 
   const handleSubmit = async (e) => {
@@ -242,8 +263,9 @@ function VendorLogin() {
 
       if (isLogin) {
         const response = await authAPI.vendorLogin(data);
-        const token = response.data.data.token;
+        const { token, refreshToken } = response.data.data;
         localStorage.setItem('token', token);
+        if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
         localStorage.setItem('userType', 'vendor');
         navigate('/vendor/dashboard');
       } else {
@@ -381,6 +403,11 @@ function VendorLogin() {
               }}>
                 <span style={{ color: 'white', fontSize: '14px' }}>Signing in...</span>
               </div>
+            )}
+            {googleError && (
+              <p style={{ color: theme.warning, fontSize: '13px', margin: '8px 0 0 0', textAlign: 'center' }}>
+                {googleError}
+              </p>
             )}
           </div>
         ) : (
@@ -673,8 +700,9 @@ function EmailVerification() {
     setLoading(true);
     try {
       const response = await authAPI.verifyEmail({ email, code });
-      const token = response.data.data.token;
+      const { token, refreshToken } = response.data.data;
       localStorage.setItem('token', token);
+      if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
       localStorage.setItem('userType', 'vendor');
       navigate('/vendor/dashboard');
     } catch (err) {
@@ -1128,6 +1156,7 @@ function ProductForm({ onSuccess }) {
   const [productName, setProductName] = useState('');
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const toast = useToast();
 
@@ -1135,10 +1164,13 @@ function ProductForm({ onSuccess }) {
     e.preventDefault();
     setLoading(true);
     try {
-      await vendorAPI.createProduct({ productName, price: parseFloat(price), category });
+      const productData = { productName, price: parseFloat(price), category };
+      if (imageUrl.trim()) productData.imageUrl = imageUrl.trim();
+      await vendorAPI.createProduct(productData);
       setProductName('');
       setPrice('');
       setCategory('');
+      setImageUrl('');
       toast.success('Product created successfully');
       setTimeout(onSuccess, 300);
     } catch (err) {
@@ -1151,7 +1183,7 @@ function ProductForm({ onSuccess }) {
   return (
     <form onSubmit={handleSubmit} style={{ ...styles.card, marginBottom: '20px' }}>
       <h3 style={{ margin: '0 0 16px 0' }}>Add New Product</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '16px', alignItems: 'end' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', alignItems: 'end' }}>
         <div>
           <label style={styles.label}>Product Name</label>
           <input
@@ -1185,10 +1217,33 @@ function ProductForm({ onSuccess }) {
             placeholder="Beverages"
           />
         </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'end', marginTop: '16px' }}>
+        <div>
+          <label style={styles.label}>Image URL (optional)</label>
+          <input
+            type="url"
+            value={imageUrl}
+            onChange={(e) => setImageUrl(e.target.value)}
+            style={styles.input}
+            placeholder="https://example.com/product-image.jpg"
+          />
+        </div>
         <button type="submit" style={styles.button} disabled={loading}>
           {loading ? 'Creating...' : 'Create'}
         </button>
       </div>
+      {imageUrl && (
+        <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <img
+            src={imageUrl}
+            alt="Preview"
+            style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '6px', border: `1px solid ${theme.border}` }}
+            onError={(e) => { e.target.style.display = 'none'; }}
+          />
+          <span style={{ color: theme.textMuted, fontSize: '13px' }}>Image preview</span>
+        </div>
+      )}
     </form>
   );
 }
@@ -1538,11 +1593,21 @@ function MachineDetails() {
               borderLeft: `4px solid ${item.is_performing === true ? theme.success : item.is_performing === false ? theme.danger : theme.border}`
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
-                <div>
-                  <h4 style={{ margin: '0 0 4px 0' }}>{item.product_name}</h4>
-                  <p style={{ color: theme.textMuted, margin: 0, fontSize: '14px' }}>
-                    ${parseFloat(item.price).toFixed(2)} • Stock: {item.current_stock}
-                  </p>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  {item.image_url && (
+                    <img
+                      src={item.image_url}
+                      alt={item.product_name}
+                      style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '6px', flexShrink: 0 }}
+                      onError={(e) => { e.target.style.display = 'none'; }}
+                    />
+                  )}
+                  <div>
+                    <h4 style={{ margin: '0 0 4px 0' }}>{item.product_name}</h4>
+                    <p style={{ color: theme.textMuted, margin: 0, fontSize: '14px' }}>
+                      ${parseFloat(item.price).toFixed(2)} • Stock: {item.current_stock}
+                    </p>
+                  </div>
                 </div>
                 <button
                   onClick={() => handleRemoveProduct(item.id)}
@@ -2839,8 +2904,28 @@ function CustomerSwipe() {
                 borderRadius: '8px',
                 marginBottom: '16px'
               }}
-              onError={(e) => { e.target.style.display = 'none'; }}
+              onError={(e) => {
+                e.target.style.display = 'none';
+                e.target.nextSibling.style.display = 'flex';
+              }}
             />
+            <div style={{
+              display: 'none',
+              width: '100%',
+              height: '200px',
+              backgroundColor: theme.surfaceHover,
+              borderRadius: '8px',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: '16px',
+              flexDirection: 'column',
+              gap: '8px',
+            }}>
+              <span style={{ fontSize: '36px', opacity: 0.4 }}>📦</span>
+              <span style={{ color: theme.textMuted, fontSize: '14px', padding: '0 20px', textAlign: 'center' }}>
+                {currentProduct?.product_name}
+              </span>
+            </div>
           ) : (
             <div style={{
               width: '100%',
@@ -2851,9 +2936,13 @@ function CustomerSwipe() {
               alignItems: 'center',
               justifyContent: 'center',
               marginBottom: '16px',
-              fontSize: '64px'
+              flexDirection: 'column',
+              gap: '8px',
             }}>
-              🍫
+              <span style={{ fontSize: '36px', opacity: 0.4 }}>📦</span>
+              <span style={{ color: theme.textMuted, fontSize: '14px', padding: '0 20px', textAlign: 'center' }}>
+                {currentProduct?.product_name}
+              </span>
             </div>
           )}
           <h3 style={{ margin: 0, fontSize: '24px' }}>{currentProduct?.product_name}</h3>
