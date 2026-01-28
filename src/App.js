@@ -2894,38 +2894,40 @@ function CustomerSwipe() {
           }}
         >
           {currentProduct?.image_url ? (
-            <img
-              src={currentProduct.image_url}
-              alt={currentProduct.product_name}
-              style={{
+            <>
+              <img
+                src={currentProduct.image_url}
+                alt={currentProduct.product_name}
+                style={{
+                  width: '100%',
+                  height: '250px',
+                  objectFit: 'cover',
+                  borderRadius: '8px',
+                  marginBottom: '16px'
+                }}
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                  e.target.nextSibling.style.display = 'flex';
+                }}
+              />
+              <div style={{
+                display: 'none',
                 width: '100%',
-                height: '250px',
-                objectFit: 'cover',
+                height: '200px',
+                backgroundColor: theme.surfaceHover,
                 borderRadius: '8px',
-                marginBottom: '16px'
-              }}
-              onError={(e) => {
-                e.target.style.display = 'none';
-                e.target.nextSibling.style.display = 'flex';
-              }}
-            />
-            <div style={{
-              display: 'none',
-              width: '100%',
-              height: '200px',
-              backgroundColor: theme.surfaceHover,
-              borderRadius: '8px',
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginBottom: '16px',
-              flexDirection: 'column',
-              gap: '8px',
-            }}>
-              <span style={{ fontSize: '36px', opacity: 0.4 }}>📦</span>
-              <span style={{ color: theme.textMuted, fontSize: '14px', padding: '0 20px', textAlign: 'center' }}>
-                {currentProduct?.product_name}
-              </span>
-            </div>
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '16px',
+                flexDirection: 'column',
+                gap: '8px',
+              }}>
+                <span style={{ fontSize: '36px', opacity: 0.4 }}>📦</span>
+                <span style={{ color: theme.textMuted, fontSize: '14px', padding: '0 20px', textAlign: 'center' }}>
+                  {currentProduct?.product_name}
+                </span>
+              </div>
+            </>
           ) : (
             <div style={{
               width: '100%',
