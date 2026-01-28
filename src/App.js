@@ -269,9 +269,18 @@ function VendorLogin() {
         localStorage.setItem('userType', 'vendor');
         navigate('/vendor/dashboard');
       } else {
-        // Registration - redirect to verification page
-        await authAPI.vendorRegister(data);
-        navigate(`/vendor/verify-email?email=${encodeURIComponent(email)}`);
+        // Registration - log in immediately
+        const response = await authAPI.vendorRegister(data);
+        const { token, refreshToken } = response.data.data;
+        if (token) {
+          localStorage.setItem('token', token);
+          if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+          localStorage.setItem('userType', 'vendor');
+          navigate('/vendor/dashboard');
+        } else {
+          // Fallback: redirect to verification if no token returned
+          navigate(`/vendor/verify-email?email=${encodeURIComponent(email)}`);
+        }
       }
     } catch (err) {
       const errorCode = err.response?.data?.code;
