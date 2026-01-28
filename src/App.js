@@ -269,18 +269,15 @@ function VendorLogin() {
         localStorage.setItem('userType', 'vendor');
         navigate('/vendor/dashboard');
       } else {
-        // Registration - log in immediately
+        // Registration - redirect to email verification
         const response = await authAPI.vendorRegister(data);
-        const { token, refreshToken } = response.data.data;
-        if (token) {
-          localStorage.setItem('token', token);
-          if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
-          localStorage.setItem('userType', 'vendor');
-          navigate('/vendor/dashboard');
-        } else {
-          // Fallback: redirect to verification if no token returned
-          navigate(`/vendor/verify-email?email=${encodeURIComponent(email)}`);
+        const { emailSent, verificationCode: code } = response.data.data;
+        // Build verify URL with email; include code if email wasn't delivered
+        let verifyUrl = `/vendor/verify-email?email=${encodeURIComponent(email)}`;
+        if (!emailSent && code) {
+          verifyUrl += `&code=${code}`;
         }
+        navigate(verifyUrl);
       }
     } catch (err) {
       const errorCode = err.response?.data?.code;
@@ -691,6 +688,7 @@ function ResetPassword() {
 function EmailVerification() {
   const [searchParams] = useSearchParams();
   const email = searchParams.get('email') || '';
+  const fallbackCode = searchParams.get('code') || '';
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -726,13 +724,22 @@ function EmailVerification() {
     }
   };
 
+  const [resendCode, setResendCode] = useState('');
+
   const handleResend = async () => {
     setResending(true);
     setError('');
     setSuccess('');
+    setResendCode('');
     try {
-      await authAPI.resendVerification({ email });
-      setSuccess('A new verification code has been sent to your email.');
+      const response = await authAPI.resendVerification({ email });
+      const data = response.data;
+      if (data.verificationCode) {
+        setResendCode(data.verificationCode);
+        setSuccess('New code generated. Enter it below.');
+      } else {
+        setSuccess('A new verification code has been sent to your email.');
+      }
       setCode('');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to resend code');
@@ -752,9 +759,35 @@ function EmailVerification() {
         <div style={{ fontSize: '48px', marginBottom: '16px' }}>📧</div>
         <h1 style={{ margin: '0 0 8px 0', fontSize: '24px' }}>Verify Your Email</h1>
         <p style={{ color: theme.textSecondary, margin: '0 0 8px 0' }}>
-          We sent a 6-digit code to:
+          {fallbackCode ? 'Enter the verification code below to activate your account:' : 'We sent a 6-digit code to:'}
         </p>
-        <p style={{ fontWeight: 'bold', marginBottom: '24px' }}>{email}</p>
+        {!fallbackCode && <p style={{ fontWeight: 'bold', marginBottom: '24px' }}>{email}</p>}
+
+        {fallbackCode && (
+          <div style={{
+            background: '#F3F4F6',
+            border: `2px solid ${theme.primary}`,
+            borderRadius: '8px',
+            padding: '16px',
+            marginBottom: '24px',
+          }}>
+            <p style={{ color: theme.textSecondary, fontSize: '13px', margin: '0 0 8px 0' }}>
+              Your verification code:
+            </p>
+            <div style={{
+              fontSize: '36px',
+              fontWeight: 'bold',
+              color: theme.primary,
+              letterSpacing: '8px',
+              fontFamily: 'monospace',
+            }}>
+              {fallbackCode}
+            </div>
+            <p style={{ color: theme.textSecondary, fontSize: '12px', margin: '8px 0 0 0' }}>
+              Email delivery is being set up. Copy and paste this code below.
+            </p>
+          </div>
+        )}
 
         <form onSubmit={handleVerify}>
           <div style={{ marginBottom: '24px' }}>
@@ -798,6 +831,26 @@ function EmailVerification() {
               borderRadius: '8px',
             }}>
               {success}
+            </div>
+          )}
+
+          {resendCode && (
+            <div style={{
+              background: '#F3F4F6',
+              border: `2px solid ${theme.primary}`,
+              borderRadius: '8px',
+              padding: '16px',
+              marginBottom: '16px',
+            }}>
+              <div style={{
+                fontSize: '36px',
+                fontWeight: 'bold',
+                color: theme.primary,
+                letterSpacing: '8px',
+                fontFamily: 'monospace',
+              }}>
+                {resendCode}
+              </div>
             </div>
           )}
 
