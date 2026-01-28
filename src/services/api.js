@@ -178,6 +178,7 @@ export const vendorAPI = {
   createPoll: (machineId, data) => api.post(`/vendor/machines/${machineId}/polls`, data),
   getPollResults: (pollId) => api.get(`/vendor/polls/${pollId}/results`),
   getSwipeResults: (machineId) => api.get(`/vendor/machines/${machineId}/swipe-results`),
+  getPollSummary: () => api.get('/vendor/poll-summary'),
 
   // Product Redistribution
   getRedistributionTargets: (machineId, productId) =>

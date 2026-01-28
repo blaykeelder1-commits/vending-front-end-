@@ -1039,6 +1039,9 @@ function VendorDashboard() {
               }}>{expiringCount}</span>
             )}
           </Link>
+          <Link to="/vendor/poll-summary" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none' }}>
+            📊 Poll Summary
+          </Link>
           <Link to="/vendor/top-products" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none' }}>
             🏆 Top 50
           </Link>
@@ -1334,6 +1337,10 @@ function MachineDetails() {
   const [notes, setNotes] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
   const [notesChanged, setNotesChanged] = useState(false);
+  // Inline poll results state
+  const [expandedPollId, setExpandedPollId] = useState(null);
+  const [expandedResults, setExpandedResults] = useState(null);
+  const [expandedLoading, setExpandedLoading] = useState(false);
   const toast = useToast();
 
   const loadMachineData = useCallback(async () => {
@@ -1443,6 +1450,25 @@ function MachineDetails() {
       loadMachineData();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to update expiration date');
+    }
+  };
+
+  const handleTogglePollResults = async (pollId) => {
+    if (expandedPollId === pollId) {
+      setExpandedPollId(null);
+      setExpandedResults(null);
+      return;
+    }
+    setExpandedPollId(pollId);
+    setExpandedLoading(true);
+    try {
+      const response = await vendorAPI.getPollResults(pollId);
+      setExpandedResults(response.data.data);
+    } catch (err) {
+      toast.error('Failed to load poll results');
+      setExpandedPollId(null);
+    } finally {
+      setExpandedLoading(false);
     }
   };
 
@@ -1972,9 +1998,49 @@ function MachineDetails() {
               <p style={{ color: theme.textMuted, fontSize: '14px', margin: '0 0 12px 0' }}>
                 {poll.product_count || 0} products • {poll.total_votes || 0} votes
               </p>
-              <Link to={`/vendor/polls/${poll.id}/results`} style={{ ...styles.button, display: 'block', textAlign: 'center', textDecoration: 'none', fontSize: '14px', padding: '10px' }}>
-                View Results
-              </Link>
+              <button
+                onClick={() => handleTogglePollResults(poll.id)}
+                style={{ ...styles.button, display: 'block', width: '100%', textAlign: 'center', fontSize: '14px', padding: '10px' }}
+              >
+                {expandedPollId === poll.id ? 'Hide Results' : 'View Results'}
+              </button>
+
+              {expandedPollId === poll.id && (
+                <div style={{ marginTop: '16px' }}>
+                  {expandedLoading ? (
+                    <p style={{ color: theme.textMuted, textAlign: 'center' }}>Loading results...</p>
+                  ) : expandedResults ? (
+                    <div>
+                      <p style={{ color: theme.textSecondary, fontSize: '13px', marginBottom: '12px' }}>
+                        {expandedResults.totalVotes} total votes
+                      </p>
+                      {expandedResults.results.map((option) => (
+                        <div key={option.option_id} style={{ marginBottom: '12px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '14px' }}>{option.product_name}</span>
+                            <span style={{ fontSize: '14px', fontWeight: 'bold' }}>{option.approval_percent}%</span>
+                          </div>
+                          <div style={{ height: '8px', backgroundColor: theme.surfaceHover, borderRadius: '4px', overflow: 'hidden' }}>
+                            <div style={{
+                              height: '100%',
+                              width: `${option.approval_percent}%`,
+                              backgroundColor: option.approval_percent >= 50 ? theme.success : theme.danger,
+                              borderRadius: '4px',
+                              transition: 'width 0.3s ease'
+                            }} />
+                          </div>
+                          <p style={{ color: theme.textMuted, fontSize: '12px', margin: '4px 0 0 0' }}>
+                            {option.swipe_right} likes / {option.swipe_left} passes
+                          </p>
+                        </div>
+                      ))}
+                      <Link to={`/vendor/polls/${poll.id}/results`} style={{ ...styles.link, fontSize: '13px' }}>
+                        Full results page →
+                      </Link>
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -2264,6 +2330,120 @@ function PollResults() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function PollSummary() {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const toast = useToast();
+
+  useEffect(() => {
+    const loadSummary = async () => {
+      try {
+        const response = await vendorAPI.getPollSummary();
+        setProducts(response.data.data.products || []);
+      } catch (err) {
+        toast.error('Failed to load poll summary');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadSummary();
+  }, [toast]);
+
+  const handleCopyShoppingList = () => {
+    const qualifying = products.filter(p => p.approval_rate >= 50 && p.total_votes > 0);
+    if (qualifying.length === 0) {
+      toast.warning('No products above 50% approval yet');
+      return;
+    }
+    const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const lines = qualifying.map((p, i) =>
+      `${i + 1}. ${p.product_name} — ${p.approval_rate}% approval (${p.total_votes} votes)`
+    );
+    const text = `IDDI Shopping List (${date})\nBased on customer poll results\n\n${lines.join('\n')}`;
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    toast.success('Shopping list copied to clipboard');
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (loading) return <div style={styles.page}><p>Loading...</p></div>;
+
+  const qualifying = products.filter(p => p.approval_rate >= 50 && p.total_votes > 0);
+
+  return (
+    <div style={styles.page}>
+      <Link to="/vendor/dashboard" style={{ ...styles.link, display: 'inline-block', marginBottom: '24px' }}>
+        ← Back to Dashboard
+      </Link>
+
+      <h1 style={{ margin: '0 0 8px 0' }}>Poll Summary</h1>
+      <p style={{ color: theme.textSecondary, margin: '0 0 32px 0' }}>
+        Aggregated results across all machines — {products.length} products polled
+      </p>
+
+      {/* Results Section */}
+      {products.length === 0 ? (
+        <div style={{ ...styles.card, textAlign: 'center', padding: '48px' }}>
+          <p style={{ color: theme.textSecondary }}>No poll data yet. Create polls on your machines to see results here.</p>
+        </div>
+      ) : (
+        <div style={{ marginBottom: '40px' }}>
+          {products.map((product) => (
+            <div key={product.product_name} style={{ ...styles.card, marginBottom: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <div>
+                  <span style={{ fontWeight: '600', fontSize: '16px' }}>{product.product_name}</span>
+                  <span style={{ color: theme.textMuted, fontSize: '13px', marginLeft: '12px' }}>
+                    {product.machines_polled} machine{product.machines_polled !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                <span style={{ fontWeight: 'bold', fontSize: '18px', color: product.approval_rate >= 50 ? theme.success : theme.danger }}>
+                  {product.approval_rate}%
+                </span>
+              </div>
+              <div style={{ height: '10px', backgroundColor: theme.surfaceHover, borderRadius: '5px', overflow: 'hidden', marginBottom: '6px' }}>
+                <div style={{
+                  height: '100%',
+                  width: `${product.approval_rate}%`,
+                  backgroundColor: product.approval_rate >= 50 ? theme.success : theme.danger,
+                  borderRadius: '5px',
+                  transition: 'width 0.3s ease'
+                }} />
+              </div>
+              <p style={{ color: theme.textMuted, fontSize: '13px', margin: 0 }}>
+                {product.likes} likes / {product.total_votes} total votes
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Shopping List Section */}
+      {qualifying.length > 0 && (
+        <div style={styles.card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h2 style={{ margin: 0 }}>Shopping List</h2>
+            <button onClick={handleCopyShoppingList} style={{ ...styles.button, ...styles.buttonSuccess }}>
+              {copied ? 'Copied!' : 'Copy Shopping List'}
+            </button>
+          </div>
+          <p style={{ color: theme.textSecondary, fontSize: '14px', margin: '0 0 16px 0' }}>
+            Products with over 50% customer approval, ranked by popularity
+          </p>
+          <div style={{ backgroundColor: theme.bg, borderRadius: '8px', padding: '16px', fontFamily: 'monospace', fontSize: '14px', lineHeight: '1.8' }}>
+            {qualifying.map((p, i) => (
+              <div key={p.product_name}>
+                {i + 1}. {p.product_name} — {p.approval_rate}% approval ({p.total_votes} votes)
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3483,6 +3663,7 @@ function App() {
           <Route path="/vendor/dashboard" element={<ProtectedRoute><VendorDashboard /></ProtectedRoute>} />
           <Route path="/vendor/machines/:id" element={<ProtectedRoute><MachineDetails /></ProtectedRoute>} />
           <Route path="/vendor/polls/:pollId/results" element={<ProtectedRoute><PollResults /></ProtectedRoute>} />
+          <Route path="/vendor/poll-summary" element={<ProtectedRoute><PollSummary /></ProtectedRoute>} />
           <Route path="/vendor/top-products" element={<ProtectedRoute><TopProducts /></ProtectedRoute>} />
           <Route path="/vendor/route-plan" element={<ProtectedRoute><RoutePlan /></ProtectedRoute>} />
           <Route path="/vendor/suggestions" element={<ProtectedRoute><Suggestions /></ProtectedRoute>} />
