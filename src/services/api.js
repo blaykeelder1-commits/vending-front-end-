@@ -206,6 +206,13 @@ export const vendorAPI = {
     api.get(`/vendor/expiring-products?days=${days}`),
   updateExpirationDate: (machineId, inventoryId, expirationDate) =>
     api.put(`/vendor/machines/${machineId}/inventory/${inventoryId}/expiration`, { expirationDate }),
+
+  // Analytics
+  getAnalyticsOverview: () => api.get('/analytics/overview'),
+  getMachineAnalytics: (machineId) => api.get(`/analytics/machines/${machineId}`),
+  getMachineRealtimeStats: (machineId) => api.get(`/analytics/machines/${machineId}/realtime`),
+  getEngagementRankings: () => api.get('/analytics/engagement'),
+  getDailyAnalytics: (days = 30) => api.get(`/analytics/daily?days=${days}`),
 };
 
 // Customer API (Anonymous)

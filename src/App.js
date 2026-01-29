@@ -996,6 +996,9 @@ function VendorDashboard() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <Link to="/vendor/analytics" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none' }}>
+            📈 Analytics
+          </Link>
           <Link to="/vendor/route-plan" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none' }}>
             📋 Route Plan
           </Link>
@@ -2448,6 +2451,319 @@ function PollSummary() {
   );
 }
 
+// ============================================
+// ANALYTICS DASHBOARD
+// ============================================
+
+function AnalyticsDashboard() {
+  const [analytics, setAnalytics] = useState(null);
+  const [engagement, setEngagement] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('overview');
+  const toast = useToast();
+
+  useEffect(() => {
+    loadAnalytics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const loadAnalytics = async () => {
+    try {
+      setLoading(true);
+      const [overviewRes, engagementRes] = await Promise.allSettled([
+        vendorAPI.getAnalyticsOverview(),
+        vendorAPI.getEngagementRankings(),
+      ]);
+
+      if (overviewRes.status === 'fulfilled') {
+        setAnalytics(overviewRes.value?.data?.data);
+      }
+      if (engagementRes.status === 'fulfilled') {
+        setEngagement(engagementRes.value?.data?.data);
+      }
+    } catch (err) {
+      toast.error('Failed to load analytics');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatChange = (change) => {
+    if (change === 0) return <span style={{ color: theme.textMuted }}>0%</span>;
+    if (change > 0) return <span style={{ color: theme.success }}>+{change}%</span>;
+    return <span style={{ color: theme.danger }}>{change}%</span>;
+  };
+
+  if (loading) {
+    return <div style={styles.page}><p>Loading analytics...</p></div>;
+  }
+
+  return (
+    <div style={styles.page}>
+      <Link to="/vendor/dashboard" style={{ ...styles.link, display: 'inline-block', marginBottom: '24px' }}>
+        ← Back to Dashboard
+      </Link>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+        <div>
+          <h1 style={{ margin: '0 0 8px 0' }}>Analytics</h1>
+          <p style={{ color: theme.textSecondary, margin: 0 }}>
+            Track customer engagement and machine performance
+          </p>
+        </div>
+        <button
+          onClick={loadAnalytics}
+          style={styles.buttonSecondary}
+        >
+          ↻ Refresh
+        </button>
+      </div>
+
+      {/* Tab Navigation */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
+        {['overview', 'engagement'].map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            style={{
+              ...styles.button,
+              backgroundColor: activeTab === tab ? theme.primary : theme.surfaceHover,
+              border: activeTab === tab ? 'none' : `1px solid ${theme.border}`,
+            }}
+          >
+            {tab === 'overview' ? '📊 Overview' : '🏆 Engagement Rankings'}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'overview' && analytics && (
+        <>
+          {/* Today's Stats */}
+          <h2 style={{ marginBottom: '16px' }}>Today</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '32px' }}>
+            <div style={styles.card}>
+              <div style={{ color: theme.textMuted, fontSize: '14px', marginBottom: '8px' }}>QR Scans</div>
+              <div style={{ fontSize: '32px', fontWeight: 'bold' }}>{analytics.today?.qrScans || 0}</div>
+            </div>
+            <div style={styles.card}>
+              <div style={{ color: theme.textMuted, fontSize: '14px', marginBottom: '8px' }}>Poll Votes</div>
+              <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.primary }}>{analytics.today?.pollVotes || 0}</div>
+            </div>
+            <div style={styles.card}>
+              <div style={{ color: theme.textMuted, fontSize: '14px', marginBottom: '8px' }}>Suggestions</div>
+              <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.success }}>{analytics.today?.suggestions || 0}</div>
+            </div>
+            <div style={styles.card}>
+              <div style={{ color: theme.textMuted, fontSize: '14px', marginBottom: '8px' }}>Unique Visitors</div>
+              <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.secondary }}>{analytics.today?.uniqueSessions || 0}</div>
+            </div>
+          </div>
+
+          {/* This Week's Stats */}
+          <h2 style={{ marginBottom: '16px' }}>This Week</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '32px' }}>
+            <div style={styles.card}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ color: theme.textMuted, fontSize: '14px', marginBottom: '8px' }}>QR Scans</div>
+                  <div style={{ fontSize: '28px', fontWeight: 'bold' }}>{analytics.thisWeek?.qrScans || 0}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '14px' }}>vs last week</div>
+                  {formatChange(analytics.weekOverWeek?.qrScansChange || 0)}
+                </div>
+              </div>
+            </div>
+            <div style={styles.card}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ color: theme.textMuted, fontSize: '14px', marginBottom: '8px' }}>Poll Votes</div>
+                  <div style={{ fontSize: '28px', fontWeight: 'bold', color: theme.primary }}>{analytics.thisWeek?.pollVotes || 0}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '14px' }}>vs last week</div>
+                  {formatChange(analytics.weekOverWeek?.pollVotesChange || 0)}
+                </div>
+              </div>
+            </div>
+            <div style={styles.card}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ color: theme.textMuted, fontSize: '14px', marginBottom: '8px' }}>Unique Visitors</div>
+                  <div style={{ fontSize: '28px', fontWeight: 'bold', color: theme.secondary }}>{analytics.thisWeek?.uniqueSessions || 0}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '14px' }}>vs last week</div>
+                  {formatChange(analytics.weekOverWeek?.sessionsChange || 0)}
+                </div>
+              </div>
+            </div>
+            <div style={styles.card}>
+              <div style={{ color: theme.textMuted, fontSize: '14px', marginBottom: '8px' }}>Suggestions</div>
+              <div style={{ fontSize: '28px', fontWeight: 'bold', color: theme.success }}>{analytics.thisWeek?.suggestions || 0}</div>
+            </div>
+          </div>
+
+          {/* Top Machines */}
+          {analytics.topMachines && analytics.topMachines.length > 0 && (
+            <>
+              <h2 style={{ marginBottom: '16px' }}>Top Machines This Week</h2>
+              <div style={{ display: 'grid', gap: '12px' }}>
+                {analytics.topMachines.slice(0, 5).map((machine, index) => (
+                  <div key={machine.machineId} style={{
+                    ...styles.card,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '20px',
+                    padding: '16px 20px'
+                  }}>
+                    <div style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 'bold',
+                      backgroundColor: index < 3 ? theme.primary + '20' : theme.surfaceHover,
+                      color: index < 3 ? theme.primary : theme.textSecondary
+                    }}>
+                      {index + 1}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <Link to={`/vendor/machines/${machine.machineId}`} style={{ ...styles.link, fontWeight: '600' }}>
+                        {machine.machineName}
+                      </Link>
+                    </div>
+                    <div style={{ display: 'flex', gap: '24px', textAlign: 'center' }}>
+                      <div>
+                        <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{machine.qrScans}</div>
+                        <div style={{ color: theme.textMuted, fontSize: '12px' }}>scans</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: theme.primary }}>{machine.pollVotes}</div>
+                        <div style={{ color: theme.textMuted, fontSize: '12px' }}>votes</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: theme.secondary }}>{machine.uniqueSessions}</div>
+                        <div style={{ color: theme.textMuted, fontSize: '12px' }}>visitors</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Empty State */}
+          {(!analytics.topMachines || analytics.topMachines.length === 0) && (
+            <div style={{ ...styles.card, textAlign: 'center', padding: '48px' }}>
+              <p style={{ color: theme.textSecondary, marginBottom: '8px' }}>No analytics data yet</p>
+              <p style={{ color: theme.textMuted, fontSize: '14px' }}>
+                Share your machine QR codes with customers to start collecting engagement data.
+              </p>
+            </div>
+          )}
+        </>
+      )}
+
+      {activeTab === 'engagement' && engagement && (
+        <>
+          <h2 style={{ marginBottom: '16px' }}>Machine Engagement Rankings (Last 30 Days)</h2>
+          <p style={{ color: theme.textMuted, marginBottom: '24px', fontSize: '14px' }}>
+            Engagement score = (QR Scans × 1) + (Poll Votes × 3) + (Suggestions × 5)
+          </p>
+
+          {engagement.machines && engagement.machines.length > 0 ? (
+            <div style={{ display: 'grid', gap: '12px' }}>
+              {engagement.machines.map((machine) => (
+                <div key={machine.machineId} style={{
+                  ...styles.card,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '20px',
+                  padding: '16px 20px'
+                }}>
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 'bold',
+                    fontSize: '16px',
+                    backgroundColor: machine.rank <= 3 ? theme.warning + '20' : theme.surfaceHover,
+                    color: machine.rank <= 3 ? theme.warning : theme.textSecondary
+                  }}>
+                    {machine.rank}
+                  </div>
+
+                  <div style={{ flex: 1 }}>
+                    <Link to={`/vendor/machines/${machine.machineId}`} style={{ ...styles.link, fontWeight: '600', fontSize: '16px' }}>
+                      {machine.machineName}
+                    </Link>
+                    {machine.location && (
+                      <div style={{ color: theme.textMuted, fontSize: '13px', marginTop: '2px' }}>
+                        📍 {machine.location}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '24px', textAlign: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{machine.qrScans}</div>
+                      <div style={{ color: theme.textMuted, fontSize: '11px' }}>scans</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '16px', fontWeight: 'bold', color: theme.primary }}>{machine.pollVotes}</div>
+                      <div style={{ color: theme.textMuted, fontSize: '11px' }}>votes</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '16px', fontWeight: 'bold', color: theme.success }}>{machine.suggestions}</div>
+                      <div style={{ color: theme.textMuted, fontSize: '11px' }}>suggestions</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '16px', fontWeight: 'bold', color: theme.secondary }}>{machine.uniqueSessions}</div>
+                      <div style={{ color: theme.textMuted, fontSize: '11px' }}>visitors</div>
+                    </div>
+                  </div>
+
+                  <div style={{
+                    padding: '8px 16px',
+                    backgroundColor: theme.primary + '20',
+                    borderRadius: '8px',
+                    textAlign: 'center',
+                    minWidth: '80px'
+                  }}>
+                    <div style={{ fontSize: '20px', fontWeight: 'bold', color: theme.primary }}>{machine.engagementScore}</div>
+                    <div style={{ color: theme.textMuted, fontSize: '11px' }}>score</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ ...styles.card, textAlign: 'center', padding: '48px' }}>
+              <p style={{ color: theme.textSecondary }}>No engagement data yet</p>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Last updated */}
+      {analytics?.lastUpdated && (
+        <p style={{ color: theme.textMuted, fontSize: '12px', marginTop: '24px', textAlign: 'center' }}>
+          Last updated: {new Date(analytics.lastUpdated).toLocaleString()}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// TOP 50 PRODUCTS
+// ============================================
+
 function TopProducts() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -3665,6 +3981,7 @@ function App() {
           <Route path="/vendor/polls/:pollId/results" element={<ProtectedRoute><PollResults /></ProtectedRoute>} />
           <Route path="/vendor/poll-summary" element={<ProtectedRoute><PollSummary /></ProtectedRoute>} />
           <Route path="/vendor/top-products" element={<ProtectedRoute><TopProducts /></ProtectedRoute>} />
+          <Route path="/vendor/analytics" element={<ProtectedRoute><AnalyticsDashboard /></ProtectedRoute>} />
           <Route path="/vendor/route-plan" element={<ProtectedRoute><RoutePlan /></ProtectedRoute>} />
           <Route path="/vendor/suggestions" element={<ProtectedRoute><Suggestions /></ProtectedRoute>} />
           <Route path="/vendor/expiring" element={<ProtectedRoute><ExpiringProducts /></ProtectedRoute>} />
