@@ -116,16 +116,18 @@ const styles = {
     minHeight: '100vh',
     backgroundColor: theme.bg,
     color: theme.text,
-    padding: '20px',
+    padding: '16px',
+    maxWidth: '100vw',
+    overflowX: 'hidden',
   },
   card: {
     backgroundColor: theme.surface,
     border: `1px solid ${theme.border}`,
     borderRadius: '12px',
-    padding: '20px',
+    padding: '16px',
   },
   button: {
-    padding: '12px 24px',
+    padding: '10px 16px',
     backgroundColor: theme.primary,
     color: 'white',
     border: 'none',
@@ -133,6 +135,8 @@ const styles = {
     cursor: 'pointer',
     fontWeight: '600',
     transition: 'all 0.2s',
+    fontSize: '14px',
+    whiteSpace: 'nowrap',
   },
   buttonSuccess: {
     backgroundColor: theme.success,
@@ -775,7 +779,7 @@ function EmailVerification() {
               Your verification code:
             </p>
             <div style={{
-              fontSize: '36px',
+              fontSize: 'clamp(24px, 6vw, 32px)',
               fontWeight: 'bold',
               color: theme.primary,
               letterSpacing: '8px',
@@ -843,7 +847,7 @@ function EmailVerification() {
               marginBottom: '16px',
             }}>
               <div style={{
-                fontSize: '36px',
+                fontSize: 'clamp(24px, 6vw, 32px)',
                 fontWeight: 'bold',
                 color: theme.primary,
                 letterSpacing: '8px',
@@ -988,64 +992,69 @@ function VendorDashboard() {
   return (
     <div style={styles.page}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: '32px' }}>Dashboard</h1>
-          <p style={{ color: theme.textSecondary, margin: '4px 0 0 0' }}>
+      <div style={{ marginBottom: '24px' }}>
+        <div style={{ marginBottom: '16px' }}>
+          <h1 style={{ margin: 0, fontSize: 'clamp(20px, 5vw, 28px)' }}>Dashboard</h1>
+          <p style={{ color: theme.textSecondary, margin: '4px 0 0 0', fontSize: '14px' }}>
             Manage your vending machines and products
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          <Link to="/vendor/analytics" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none' }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
+          gap: '8px',
+          maxWidth: '100%'
+        }}>
+          <Link to="/vendor/analytics" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             📈 Analytics
           </Link>
-          <Link to="/vendor/route-plan" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none' }}>
+          <Link to="/vendor/route-plan" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             📋 Route Plan
           </Link>
-          <Link to="/vendor/suggestions" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', position: 'relative' }}>
+          <Link to="/vendor/suggestions" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', position: 'relative', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             💡 Suggestions
             {pendingSuggestions > 0 && (
               <span style={{
                 position: 'absolute',
-                top: '-8px',
-                right: '-8px',
+                top: '-6px',
+                right: '-6px',
                 backgroundColor: theme.danger,
                 color: 'white',
                 borderRadius: '50%',
-                width: '22px',
-                height: '22px',
+                width: '18px',
+                height: '18px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '12px',
+                fontSize: '10px',
                 fontWeight: 'bold'
               }}>{pendingSuggestions}</span>
             )}
           </Link>
-          <Link to="/vendor/expiring" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', position: 'relative' }}>
+          <Link to="/vendor/expiring" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', position: 'relative', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             ⏰ Expiring
             {expiringCount > 0 && (
               <span style={{
                 position: 'absolute',
-                top: '-8px',
-                right: '-8px',
+                top: '-6px',
+                right: '-6px',
                 backgroundColor: theme.warning,
                 color: 'black',
                 borderRadius: '50%',
-                width: '22px',
-                height: '22px',
+                width: '18px',
+                height: '18px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '12px',
+                fontSize: '10px',
                 fontWeight: 'bold'
               }}>{expiringCount}</span>
             )}
           </Link>
-          <Link to="/vendor/poll-summary" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none' }}>
-            📊 Poll Summary
+          <Link to="/vendor/poll-summary" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            📊 Polls
           </Link>
-          <Link to="/vendor/top-products" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none' }}>
+          <Link to="/vendor/top-products" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             🏆 Top 50
           </Link>
           <button onClick={loadData} style={{ ...styles.button, ...styles.buttonSecondary }}>
@@ -1068,7 +1077,7 @@ function VendorDashboard() {
 
         {showMachineForm && <MachineForm onSuccess={() => { setShowMachineForm(false); loadData(); }} />}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: '12px' }}>
           {machines.map(machine => (
             <div key={machine.id} style={styles.card}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
@@ -1576,26 +1585,26 @@ function MachineDetails() {
         </div>
 
         {/* Stats */}
-        <div style={{ display: 'flex', gap: '32px', marginTop: '24px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '16px', marginTop: '24px', flexWrap: 'wrap' }}>
           <div>
-            <div style={{ fontSize: '32px', fontWeight: 'bold' }}>{stats.total || 0}</div>
+            <div style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: 'bold' }}>{stats.total || 0}</div>
             <div style={{ color: theme.textMuted, fontSize: '14px' }}>Total Products</div>
           </div>
           <div>
-            <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.success }}>{stats.performing || 0}</div>
+            <div style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: 'bold', color: theme.success }}>{stats.performing || 0}</div>
             <div style={{ color: theme.textMuted, fontSize: '14px' }}>Performing Well</div>
           </div>
           <div>
-            <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.danger }}>{stats.notPerforming || 0}</div>
+            <div style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: 'bold', color: theme.danger }}>{stats.notPerforming || 0}</div>
             <div style={{ color: theme.textMuted, fontSize: '14px' }}>Not Performing</div>
           </div>
           <div>
-            <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.textMuted }}>{stats.unmarked || 0}</div>
+            <div style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: 'bold', color: theme.textMuted }}>{stats.unmarked || 0}</div>
             <div style={{ color: theme.textMuted, fontSize: '14px' }}>Not Marked</div>
           </div>
           {stats.expiringSoon > 0 && (
             <div>
-              <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.warning }}>{stats.expiringSoon}</div>
+              <div style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: 'bold', color: theme.warning }}>{stats.expiringSoon}</div>
               <div style={{ color: theme.textMuted, fontSize: '14px' }}>Expiring Soon</div>
             </div>
           )}
@@ -1677,7 +1686,7 @@ function MachineDetails() {
           </form>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '16px' }}>
           {inventory.map(item => (
             <div key={item.id} style={{
               ...styles.card,
@@ -2297,7 +2306,7 @@ function PollResults() {
         {results.poll.machine_name} • {results.totalVotes} total votes
       </p>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '20px' }}>
         {results.results.map((option, index) => (
           <div key={option.option_id} style={styles.card}>
             {option.image_url && (
@@ -2543,19 +2552,19 @@ function AnalyticsDashboard() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '32px' }}>
             <div style={styles.card}>
               <div style={{ color: theme.textMuted, fontSize: '14px', marginBottom: '8px' }}>QR Scans</div>
-              <div style={{ fontSize: '32px', fontWeight: 'bold' }}>{analytics.today?.qrScans || 0}</div>
+              <div style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: 'bold' }}>{analytics.today?.qrScans || 0}</div>
             </div>
             <div style={styles.card}>
               <div style={{ color: theme.textMuted, fontSize: '14px', marginBottom: '8px' }}>Poll Votes</div>
-              <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.primary }}>{analytics.today?.pollVotes || 0}</div>
+              <div style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: 'bold', color: theme.primary }}>{analytics.today?.pollVotes || 0}</div>
             </div>
             <div style={styles.card}>
               <div style={{ color: theme.textMuted, fontSize: '14px', marginBottom: '8px' }}>Suggestions</div>
-              <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.success }}>{analytics.today?.suggestions || 0}</div>
+              <div style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: 'bold', color: theme.success }}>{analytics.today?.suggestions || 0}</div>
             </div>
             <div style={styles.card}>
               <div style={{ color: theme.textMuted, fontSize: '14px', marginBottom: '8px' }}>Unique Visitors</div>
-              <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.secondary }}>{analytics.today?.uniqueSessions || 0}</div>
+              <div style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: 'bold', color: theme.secondary }}>{analytics.today?.uniqueSessions || 0}</div>
             </div>
           </div>
 
@@ -2989,21 +2998,21 @@ function RoutePlan() {
         </div>
 
         {/* Summary Stats */}
-        <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
           <div>
-            <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.warning }}>
+            <div style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: 'bold', color: theme.warning }}>
               {routeData.summary.totalMachinesAffected}
             </div>
             <div style={{ color: theme.textMuted, fontSize: '14px' }}>Machines to Visit</div>
           </div>
           <div>
-            <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.danger }}>
+            <div style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: 'bold', color: theme.danger }}>
               {routeData.summary.totalProductsToRemove}
             </div>
             <div style={{ color: theme.textMuted, fontSize: '14px' }}>Products to Remove</div>
           </div>
           <div>
-            <div style={{ fontSize: '32px', fontWeight: 'bold', color: theme.success }}>
+            <div style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: 'bold', color: theme.success }}>
               {routeData.summary.totalProductsToAdd}
             </div>
             <div style={{ color: theme.textMuted, fontSize: '14px' }}>Products to Add</div>
@@ -3480,7 +3489,7 @@ function CustomerSwipe() {
                 flexDirection: 'column',
                 gap: '8px',
               }}>
-                <span style={{ fontSize: '36px', opacity: 0.4 }}>📦</span>
+                <span style={{ fontSize: 'clamp(24px, 6vw, 32px)', opacity: 0.4 }}>📦</span>
                 <span style={{ color: theme.textMuted, fontSize: '14px', padding: '0 20px', textAlign: 'center' }}>
                   {currentProduct?.product_name}
                 </span>
@@ -3499,7 +3508,7 @@ function CustomerSwipe() {
               flexDirection: 'column',
               gap: '8px',
             }}>
-              <span style={{ fontSize: '36px', opacity: 0.4 }}>📦</span>
+              <span style={{ fontSize: 'clamp(24px, 6vw, 32px)', opacity: 0.4 }}>📦</span>
               <span style={{ color: theme.textMuted, fontSize: '14px', padding: '0 20px', textAlign: 'center' }}>
                 {currentProduct?.product_name}
               </span>
