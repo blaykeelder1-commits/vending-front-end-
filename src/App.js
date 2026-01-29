@@ -1155,7 +1155,7 @@ function VendorDashboard() {
 
         {showProductForm && <ProductForm onSuccess={() => { setShowProductForm(false); loadData(); }} />}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 240px), 1fr))', gap: '16px' }}>
           {products.map(product => (
             <div key={product.id} style={styles.card}>
               <h4 style={{ margin: '0 0 8px 0' }}>{product.product_name}</h4>
@@ -1198,14 +1198,14 @@ function MachineForm({ onSuccess }) {
   return (
     <form onSubmit={handleSubmit} style={{ ...styles.card, marginBottom: '20px' }}>
       <h3 style={{ margin: '0 0 16px 0' }}>Add New Machine</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '16px', alignItems: 'end' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <div>
           <label style={styles.label}>Machine Name</label>
           <input
             type="text"
             value={machineName}
             onChange={(e) => setMachineName(e.target.value)}
-            style={styles.input}
+            style={{ ...styles.input, width: '100%' }}
             placeholder="Office Building A"
             required
           />
@@ -1216,12 +1216,12 @@ function MachineForm({ onSuccess }) {
             type="text"
             value={location}
             onChange={(e) => setLocation(e.target.value)}
-            style={styles.input}
+            style={{ ...styles.input, width: '100%' }}
             placeholder="123 Main St, Floor 2"
             required
           />
         </div>
-        <button type="submit" style={styles.button} disabled={loading}>
+        <button type="submit" style={{ ...styles.button, width: '100%' }} disabled={loading}>
           {loading ? 'Creating...' : 'Create'}
         </button>
       </div>
@@ -1260,67 +1260,67 @@ function ProductForm({ onSuccess }) {
   return (
     <form onSubmit={handleSubmit} style={{ ...styles.card, marginBottom: '20px' }}>
       <h3 style={{ margin: '0 0 16px 0' }}>Add New Product</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', alignItems: 'end' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <div>
           <label style={styles.label}>Product Name</label>
           <input
             type="text"
             value={productName}
             onChange={(e) => setProductName(e.target.value)}
-            style={styles.input}
+            style={{ ...styles.input, width: '100%' }}
             placeholder="Coca-Cola"
             required
           />
         </div>
-        <div>
-          <label style={styles.label}>Price</label>
-          <input
-            type="number"
-            step="0.01"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            style={styles.input}
-            placeholder="1.50"
-            required
-          />
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <div style={{ flex: 1 }}>
+            <label style={styles.label}>Price</label>
+            <input
+              type="number"
+              step="0.01"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              style={{ ...styles.input, width: '100%' }}
+              placeholder="1.50"
+              required
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={styles.label}>Category</label>
+            <input
+              type="text"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              style={{ ...styles.input, width: '100%' }}
+              placeholder="Beverages"
+            />
+          </div>
         </div>
-        <div>
-          <label style={styles.label}>Category</label>
-          <input
-            type="text"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            style={styles.input}
-            placeholder="Beverages"
-          />
-        </div>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'end', marginTop: '16px' }}>
         <div>
           <label style={styles.label}>Image URL (optional)</label>
           <input
             type="url"
             value={imageUrl}
             onChange={(e) => setImageUrl(e.target.value)}
-            style={styles.input}
+            style={{ ...styles.input, width: '100%' }}
             placeholder="https://example.com/product-image.jpg"
           />
         </div>
-        <button type="submit" style={styles.button} disabled={loading}>
+        {imageUrl && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <img
+              src={imageUrl}
+              alt="Preview"
+              style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '6px', border: `1px solid ${theme.border}` }}
+              onError={(e) => { e.target.style.display = 'none'; }}
+            />
+            <span style={{ color: theme.textMuted, fontSize: '13px' }}>Image preview</span>
+          </div>
+        )}
+        <button type="submit" style={{ ...styles.button, width: '100%' }} disabled={loading}>
           {loading ? 'Creating...' : 'Create'}
         </button>
       </div>
-      {imageUrl && (
-        <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <img
-            src={imageUrl}
-            alt="Preview"
-            style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '6px', border: `1px solid ${theme.border}` }}
-            onError={(e) => { e.target.style.display = 'none'; }}
-          />
-          <span style={{ color: theme.textMuted, fontSize: '13px' }}>Image preview</span>
-        </div>
-      )}
     </form>
   );
 }
@@ -1653,13 +1653,13 @@ function MachineDetails() {
 
         {showAddForm && (
           <form onSubmit={handleAddProduct} style={{ ...styles.card, marginBottom: '20px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '16px', alignItems: 'end' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
                 <label style={styles.label}>Product</label>
                 <select
                   value={selectedProductId}
                   onChange={(e) => setSelectedProductId(e.target.value)}
-                  style={styles.input}
+                  style={{ ...styles.input, width: '100%' }}
                   required
                 >
                   <option value="">Select product...</option>
@@ -1670,18 +1670,20 @@ function MachineDetails() {
                   ))}
                 </select>
               </div>
-              <div>
-                <label style={styles.label}>Initial Stock</label>
-                <input
-                  type="number"
-                  value={stockQuantity}
-                  onChange={(e) => setStockQuantity(e.target.value)}
-                  style={styles.input}
-                  min="0"
-                  required
-                />
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
+                <div style={{ flex: 1 }}>
+                  <label style={styles.label}>Initial Stock</label>
+                  <input
+                    type="number"
+                    value={stockQuantity}
+                    onChange={(e) => setStockQuantity(e.target.value)}
+                    style={{ ...styles.input, width: '100%' }}
+                    min="0"
+                    required
+                  />
+                </div>
+                <button type="submit" style={{ ...styles.button, whiteSpace: 'nowrap' }}>Add</button>
               </div>
-              <button type="submit" style={styles.button}>Add</button>
             </div>
           </form>
         )}
@@ -2549,7 +2551,7 @@ function AnalyticsDashboard() {
         <>
           {/* Today's Stats */}
           <h2 style={{ marginBottom: '16px' }}>Today</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '32px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 150px), 1fr))', gap: '16px', marginBottom: '32px' }}>
             <div style={styles.card}>
               <div style={{ color: theme.textMuted, fontSize: '14px', marginBottom: '8px' }}>QR Scans</div>
               <div style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: 'bold' }}>{analytics.today?.qrScans || 0}</div>
@@ -2570,7 +2572,7 @@ function AnalyticsDashboard() {
 
           {/* This Week's Stats */}
           <h2 style={{ marginBottom: '16px' }}>This Week</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '32px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '16px', marginBottom: '32px' }}>
             <div style={styles.card}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
