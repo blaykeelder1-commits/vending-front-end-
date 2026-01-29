@@ -170,6 +170,34 @@ const styles = {
 };
 
 // ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+// Format time ago for visit display
+function formatTimeAgo(dateString) {
+  if (!dateString) return null;
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffSecs = Math.floor(diffMs / 1000);
+  const diffMins = Math.floor(diffSecs / 60);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffDays > 30) {
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  } else if (diffDays > 0) {
+    return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
+  } else if (diffHours > 0) {
+    return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
+  } else if (diffMins > 0) {
+    return `${diffMins} min${diffMins === 1 ? '' : 's'} ago`;
+  } else {
+    return 'Just now';
+  }
+}
+
+// ============================================
 // VENDOR COMPONENTS
 // ============================================
 
@@ -1092,9 +1120,14 @@ function VendorDashboard() {
                   {machine.is_active ? 'Active' : 'Inactive'}
                 </span>
               </div>
-              <p style={{ color: theme.textSecondary, margin: '0 0 16px 0' }}>
+              <p style={{ color: theme.textSecondary, margin: '0 0 8px 0' }}>
                 📍 {machine.location}
               </p>
+              {machine.last_visit_at && (
+                <p style={{ color: theme.textMuted, margin: '0 0 12px 0', fontSize: '13px' }}>
+                  🕐 Last visit: {formatTimeAgo(machine.last_visit_at)}
+                </p>
+              )}
 
               {/* Performance Stats */}
               <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
@@ -1353,16 +1386,20 @@ function MachineDetails() {
   const [expandedPollId, setExpandedPollId] = useState(null);
   const [expandedResults, setExpandedResults] = useState(null);
   const [expandedLoading, setExpandedLoading] = useState(false);
+  // Visit history state
+  const [visitChanges, setVisitChanges] = useState(null);
+  const [showVisitDetails, setShowVisitDetails] = useState(false);
   const toast = useToast();
 
   const loadMachineData = useCallback(async () => {
     try {
       setLoading(true);
-      const [machineRes, inventoryRes, productsRes, pollsRes] = await Promise.allSettled([
+      const [machineRes, inventoryRes, productsRes, pollsRes, visitRes] = await Promise.allSettled([
         vendorAPI.getMachine(id),
         vendorAPI.getMachineInventory(id),
         vendorAPI.getProducts(),
-        vendorAPI.getMachinePolls(id)
+        vendorAPI.getMachinePolls(id),
+        vendorAPI.getChangesSinceVisit(id)
       ]);
 
       if (machineRes.status === 'fulfilled') {
@@ -1388,6 +1425,10 @@ function MachineDetails() {
 
       if (pollsRes.status === 'fulfilled') {
         setPolls(pollsRes.value.data.data.polls || []);
+      }
+
+      if (visitRes.status === 'fulfilled') {
+        setVisitChanges(visitRes.value.data.data);
       }
     } catch (err) {
       toast.error('Failed to load machine data');
@@ -1610,6 +1651,115 @@ function MachineDetails() {
           )}
         </div>
       </div>
+
+      {/* Since Last Visit Summary Card */}
+      {visitChanges?.hasHistory && visitChanges?.summary?.totalChanges > 0 && (
+        <div style={{ ...styles.card, marginBottom: '24px', borderLeft: `4px solid ${theme.primary}` }}>
+          <div
+            onClick={() => setShowVisitDetails(!showVisitDetails)}
+            style={{ cursor: 'pointer' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '16px' }}>
+                📋 Since Last Visit
+                <span style={{ fontWeight: 'normal', color: theme.textMuted, fontSize: '14px', marginLeft: '8px' }}>
+                  ({formatTimeAgo(visitChanges.lastVisitAt)})
+                </span>
+              </h3>
+              <span style={{ color: theme.textMuted, fontSize: '20px' }}>
+                {showVisitDetails ? '▼' : '▶'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: '16px', marginTop: '12px', flexWrap: 'wrap' }}>
+              {visitChanges.summary.performanceChanges > 0 && (
+                <span style={{ color: theme.primary, fontSize: '14px' }}>
+                  {visitChanges.summary.performanceChanges} performance change{visitChanges.summary.performanceChanges !== 1 ? 's' : ''}
+                </span>
+              )}
+              {visitChanges.summary.productsAdded > 0 && (
+                <span style={{ color: theme.success, fontSize: '14px' }}>
+                  {visitChanges.summary.productsAdded} product{visitChanges.summary.productsAdded !== 1 ? 's' : ''} added
+                </span>
+              )}
+              {visitChanges.summary.productsRemoved > 0 && (
+                <span style={{ color: theme.danger, fontSize: '14px' }}>
+                  {visitChanges.summary.productsRemoved} product{visitChanges.summary.productsRemoved !== 1 ? 's' : ''} removed
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Expanded Details */}
+          {showVisitDetails && visitChanges.changes?.length > 0 && (
+            <div style={{ marginTop: '16px', borderTop: `1px solid ${theme.border}`, paddingTop: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {visitChanges.changes.map((change, idx) => (
+                  <div key={idx} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '8px 12px',
+                    backgroundColor: theme.surfaceHover,
+                    borderRadius: '8px',
+                    fontSize: '13px'
+                  }}>
+                    <span style={{
+                      width: '24px',
+                      height: '24px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '50%',
+                      backgroundColor: change.actionType === 'performance_change' ? theme.primary + '30' :
+                                       change.actionType === 'product_added' ? theme.success + '30' :
+                                       change.actionType === 'product_removed' ? theme.danger + '30' : theme.border,
+                      fontSize: '12px'
+                    }}>
+                      {change.actionType === 'performance_change' ? '📊' :
+                       change.actionType === 'product_added' ? '➕' :
+                       change.actionType === 'product_removed' ? '➖' : '📝'}
+                    </span>
+                    <div style={{ flex: 1 }}>
+                      {change.actionType === 'performance_change' && (
+                        <span>
+                          <strong>{change.details.product_name}</strong>
+                          {' marked as '}
+                          <span style={{ color: change.details.new_status ? theme.success : theme.danger }}>
+                            {change.details.new_status ? 'performing' : 'not performing'}
+                          </span>
+                          {change.details.old_status !== null && (
+                            <span style={{ color: theme.textMuted }}>
+                              {' (was '}{change.details.old_status ? 'performing' : 'not performing'}{')'}
+                            </span>
+                          )}
+                        </span>
+                      )}
+                      {change.actionType === 'product_added' && (
+                        <span>
+                          <strong>{change.details.product_name}</strong>
+                          {' added to inventory'}
+                          {change.details.initial_stock > 0 && (
+                            <span style={{ color: theme.textMuted }}> (qty: {change.details.initial_stock})</span>
+                          )}
+                        </span>
+                      )}
+                      {change.actionType === 'product_removed' && (
+                        <span>
+                          <strong>{change.details.product_name}</strong>
+                          {' removed from inventory'}
+                        </span>
+                      )}
+                    </div>
+                    <span style={{ color: theme.textMuted, fontSize: '12px' }}>
+                      {formatTimeAgo(change.createdAt)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Machine Notes Section */}
       <div style={{ ...styles.card, marginBottom: '24px' }}>

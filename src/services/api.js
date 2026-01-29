@@ -207,6 +207,12 @@ export const vendorAPI = {
   updateExpirationDate: (machineId, inventoryId, expirationDate) =>
     api.put(`/vendor/machines/${machineId}/inventory/${inventoryId}/expiration`, { expirationDate }),
 
+  // Visit History / Memory
+  getChangesSinceVisit: (machineId) =>
+    api.get(`/vendor/machines/${machineId}/changes-since-visit`),
+  getMachineHistory: (machineId, limit = 50, offset = 0) =>
+    api.get(`/vendor/machines/${machineId}/history?limit=${limit}&offset=${offset}`),
+
   // Analytics
   getAnalyticsOverview: () => api.get('/analytics/overview'),
   getMachineAnalytics: (machineId) => api.get(`/analytics/machines/${machineId}`),
