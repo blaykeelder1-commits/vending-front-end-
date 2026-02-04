@@ -1,8 +1,26 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import * as Sentry from '@sentry/react';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
+
+// Initialize Sentry for error tracking (if DSN is provided)
+if (process.env.REACT_APP_SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.REACT_APP_SENTRY_DSN,
+    environment: process.env.NODE_ENV || 'development',
+    integrations: [
+      Sentry.browserTracingIntegration(),
+      Sentry.replayIntegration(),
+    ],
+    tracesSampleRate: 0.1,
+    replaysSessionSampleRate: 0.1,
+    replaysOnErrorSampleRate: 1.0,
+  });
+  // Make Sentry available globally for ErrorBoundary
+  window.Sentry = Sentry;
+}
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
