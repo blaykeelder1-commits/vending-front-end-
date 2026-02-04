@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Link, Navigate, useNavigate, us
 import { authAPI, vendorAPI, customerAPI, publicAPI } from './services/api';
 import QRCode from 'qrcode';
 import { jsPDF } from 'jspdf';
+import ErrorBoundary from './components/ErrorBoundary';
 import './App.css';
 
 const FRONTEND_URL = process.env.REACT_APP_FRONTEND_URL || window.location.origin;
@@ -168,6 +169,101 @@ const styles = {
     textDecoration: 'none',
   },
 };
+
+// ============================================
+// MOBILE NAVIGATION COMPONENT
+// ============================================
+
+function MobileNav({ isOpen, onClose, onLogout }) {
+  const location = useLocation();
+
+  // Close nav when route changes
+  useEffect(() => {
+    onClose();
+  }, [location.pathname, onClose]);
+
+  // Prevent body scroll when nav is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
+  const navLinks = [
+    { to: '/vendor/dashboard', label: 'Dashboard', icon: '🏠' },
+    { to: '/vendor/analytics', label: 'Analytics', icon: '📈' },
+    { to: '/vendor/route-plan', label: 'Route Plan', icon: '📋' },
+    { to: '/vendor/suggestions', label: 'Suggestions', icon: '💡' },
+    { to: '/vendor/expiring', label: 'Expiring', icon: '⏰' },
+    { to: '/vendor/poll-summary', label: 'Polls', icon: '📊' },
+    { to: '/vendor/top-products', label: 'Top 50', icon: '🏆' },
+  ];
+
+  return (
+    <div
+      className={`mobile-nav ${isOpen ? 'open' : ''}`}
+      role="navigation"
+      aria-hidden={!isOpen}
+    >
+      <div className="mobile-nav-links">
+        {navLinks.map(link => (
+          <Link
+            key={link.to}
+            to={link.to}
+            className={location.pathname === link.to ? 'active' : ''}
+            onClick={onClose}
+          >
+            <span>{link.icon}</span>
+            {link.label}
+          </Link>
+        ))}
+        <hr style={{ border: 'none', borderTop: '1px solid #2a2a2a', margin: '16px 0' }} />
+        <button onClick={() => { onLogout(); onClose(); }}>
+          <span>🚪</span>
+          Logout
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MobileMenuButton({ isOpen, onClick }) {
+  return (
+    <button
+      className={`mobile-menu-btn ${isOpen ? 'open' : ''}`}
+      onClick={onClick}
+      aria-label={isOpen ? 'Close menu' : 'Open menu'}
+      aria-expanded={isOpen}
+    >
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+  );
+}
+
+// Custom hook for responsive detection
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== 'undefined' ? window.innerWidth < breakpoint : false
+  );
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < breakpoint);
+    };
+
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, [breakpoint]);
+
+  return isMobile;
+}
 
 // ============================================
 // HELPER FUNCTIONS
@@ -930,8 +1026,10 @@ function VendorDashboard() {
   const [loading, setLoading] = useState(true);
   const [expiringCount, setExpiringCount] = useState(0);
   const [pendingSuggestions, setPendingSuggestions] = useState(0);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const toast = useToast();
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -1019,79 +1117,109 @@ function VendorDashboard() {
 
   return (
     <div style={styles.page}>
+      {/* Mobile Navigation */}
+      {isMobile && (
+        <MobileNav
+          isOpen={isMobileMenuOpen}
+          onClose={() => setIsMobileMenuOpen(false)}
+          onLogout={handleLogout}
+        />
+      )}
+
       {/* Header */}
       <div style={{ marginBottom: '24px' }}>
-        <div style={{ marginBottom: '16px' }}>
-          <h1 style={{ margin: 0, fontSize: 'clamp(20px, 5vw, 28px)' }}>Dashboard</h1>
-          <p style={{ color: theme.textSecondary, margin: '4px 0 0 0', fontSize: '14px' }}>
-            Manage your vending machines and products
-          </p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 'clamp(20px, 5vw, 28px)' }}>Dashboard</h1>
+            <p style={{ color: theme.textSecondary, margin: '4px 0 0 0', fontSize: '14px' }}>
+              Manage your vending machines and products
+            </p>
+          </div>
+          {isMobile && (
+            <MobileMenuButton
+              isOpen={isMobileMenuOpen}
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            />
+          )}
         </div>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
-          gap: '8px',
-          maxWidth: '100%'
-        }}>
-          <Link to="/vendor/analytics" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            📈 Analytics
-          </Link>
-          <Link to="/vendor/route-plan" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            📋 Route Plan
-          </Link>
-          <Link to="/vendor/suggestions" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', position: 'relative', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            💡 Suggestions
-            {pendingSuggestions > 0 && (
-              <span style={{
-                position: 'absolute',
-                top: '-6px',
-                right: '-6px',
-                backgroundColor: theme.danger,
-                color: 'white',
-                borderRadius: '50%',
-                width: '18px',
-                height: '18px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '10px',
-                fontWeight: 'bold'
-              }}>{pendingSuggestions}</span>
-            )}
-          </Link>
-          <Link to="/vendor/expiring" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', position: 'relative', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            ⏰ Expiring
-            {expiringCount > 0 && (
-              <span style={{
-                position: 'absolute',
-                top: '-6px',
-                right: '-6px',
-                backgroundColor: theme.warning,
-                color: 'black',
-                borderRadius: '50%',
-                width: '18px',
-                height: '18px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '10px',
-                fontWeight: 'bold'
-              }}>{expiringCount}</span>
-            )}
-          </Link>
-          <Link to="/vendor/poll-summary" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            📊 Polls
-          </Link>
-          <Link to="/vendor/top-products" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            🏆 Top 50
-          </Link>
-          <button onClick={loadData} style={{ ...styles.button, ...styles.buttonSecondary }}>
-            ↻ Refresh
-          </button>
-          <button onClick={handleLogout} style={{ ...styles.button, ...styles.buttonDanger }}>
-            Logout
-          </button>
-        </div>
+
+        {/* Desktop Navigation - hidden on mobile */}
+        {!isMobile && (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
+            gap: '8px',
+            maxWidth: '100%'
+          }}>
+            <Link to="/vendor/analytics" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              📈 Analytics
+            </Link>
+            <Link to="/vendor/route-plan" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              📋 Route Plan
+            </Link>
+            <Link to="/vendor/suggestions" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', position: 'relative', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              💡 Suggestions
+              {pendingSuggestions > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: '-6px',
+                  right: '-6px',
+                  backgroundColor: theme.danger,
+                  color: 'white',
+                  borderRadius: '50%',
+                  width: '18px',
+                  height: '18px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '10px',
+                  fontWeight: 'bold'
+                }}>{pendingSuggestions}</span>
+              )}
+            </Link>
+            <Link to="/vendor/expiring" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', position: 'relative', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              ⏰ Expiring
+              {expiringCount > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: '-6px',
+                  right: '-6px',
+                  backgroundColor: theme.warning,
+                  color: 'black',
+                  borderRadius: '50%',
+                  width: '18px',
+                  height: '18px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '10px',
+                  fontWeight: 'bold'
+                }}>{expiringCount}</span>
+              )}
+            </Link>
+            <Link to="/vendor/poll-summary" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              📊 Polls
+            </Link>
+            <Link to="/vendor/top-products" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              🏆 Top 50
+            </Link>
+            <button onClick={loadData} style={{ ...styles.button, ...styles.buttonSecondary }}>
+              ↻ Refresh
+            </button>
+            <button onClick={handleLogout} style={{ ...styles.button, ...styles.buttonDanger }}>
+              Logout
+            </button>
+          </div>
+        )}
+
+        {/* Mobile Quick Actions */}
+        {isMobile && (
+          <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+            <button onClick={loadData} style={{ ...styles.button, ...styles.buttonSecondary, flex: 1 }}>
+              ↻ Refresh
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Machines Section */}
@@ -4125,36 +4253,38 @@ function ProtectedRoute({ children }) {
 
 function App() {
   return (
-    <ToastProvider>
-      <Router>
-        <Routes>
-          <Route path="/" element={<Home />} />
+    <ErrorBoundary>
+      <ToastProvider>
+        <Router>
+          <Routes>
+            <Route path="/" element={<Home />} />
 
-          {/* Vendor Auth Routes (Public) */}
-          <Route path="/vendor/login" element={<VendorLogin />} />
-          <Route path="/vendor/verify-email" element={<EmailVerification />} />
-          <Route path="/vendor/forgot-password" element={<ForgotPassword />} />
-          <Route path="/vendor/reset-password" element={<ResetPassword />} />
+            {/* Vendor Auth Routes (Public) */}
+            <Route path="/vendor/login" element={<VendorLogin />} />
+            <Route path="/vendor/verify-email" element={<EmailVerification />} />
+            <Route path="/vendor/forgot-password" element={<ForgotPassword />} />
+            <Route path="/vendor/reset-password" element={<ResetPassword />} />
 
-          {/* Vendor Protected Routes */}
-          <Route path="/vendor/dashboard" element={<ProtectedRoute><VendorDashboard /></ProtectedRoute>} />
-          <Route path="/vendor/machines/:id" element={<ProtectedRoute><MachineDetails /></ProtectedRoute>} />
-          <Route path="/vendor/polls/:pollId/results" element={<ProtectedRoute><PollResults /></ProtectedRoute>} />
-          <Route path="/vendor/poll-summary" element={<ProtectedRoute><PollSummary /></ProtectedRoute>} />
-          <Route path="/vendor/top-products" element={<ProtectedRoute><TopProducts /></ProtectedRoute>} />
-          <Route path="/vendor/analytics" element={<ProtectedRoute><AnalyticsDashboard /></ProtectedRoute>} />
-          <Route path="/vendor/route-plan" element={<ProtectedRoute><RoutePlan /></ProtectedRoute>} />
-          <Route path="/vendor/suggestions" element={<ProtectedRoute><Suggestions /></ProtectedRoute>} />
-          <Route path="/vendor/expiring" element={<ProtectedRoute><ExpiringProducts /></ProtectedRoute>} />
+            {/* Vendor Protected Routes */}
+            <Route path="/vendor/dashboard" element={<ProtectedRoute><VendorDashboard /></ProtectedRoute>} />
+            <Route path="/vendor/machines/:id" element={<ProtectedRoute><MachineDetails /></ProtectedRoute>} />
+            <Route path="/vendor/polls/:pollId/results" element={<ProtectedRoute><PollResults /></ProtectedRoute>} />
+            <Route path="/vendor/poll-summary" element={<ProtectedRoute><PollSummary /></ProtectedRoute>} />
+            <Route path="/vendor/top-products" element={<ProtectedRoute><TopProducts /></ProtectedRoute>} />
+            <Route path="/vendor/analytics" element={<ProtectedRoute><AnalyticsDashboard /></ProtectedRoute>} />
+            <Route path="/vendor/route-plan" element={<ProtectedRoute><RoutePlan /></ProtectedRoute>} />
+            <Route path="/vendor/suggestions" element={<ProtectedRoute><Suggestions /></ProtectedRoute>} />
+            <Route path="/vendor/expiring" element={<ProtectedRoute><ExpiringProducts /></ProtectedRoute>} />
 
-          {/* Customer Routes (Anonymous) */}
-          <Route path="/customer/machine/:qr_token" element={<CustomerMachine />} />
+            {/* Customer Routes (Anonymous) */}
+            <Route path="/customer/machine/:qr_token" element={<CustomerMachine />} />
 
-          {/* Default redirect */}
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </Router>
-    </ToastProvider>
+            {/* Default redirect */}
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </Router>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }
 
