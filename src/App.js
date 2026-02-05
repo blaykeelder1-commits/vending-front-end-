@@ -1572,15 +1572,31 @@ function MachineDetails() {
   const handleAddProduct = async (e) => {
     e.preventDefault();
     try {
-      await vendorAPI.addToInventory(id, {
+      const response = await vendorAPI.addToInventory(id, {
         productId: parseInt(selectedProductId),
         stockQuantity: parseInt(stockQuantity)
       });
+
+      // Get product details from local state
+      const product = products.find(p => p.id === parseInt(selectedProductId));
+      const newItem = response.data.data.inventoryItem;
+
+      // Build full inventory item with product details
+      const fullItem = {
+        ...newItem,
+        product_name: product?.product_name,
+        price: product?.price,
+        image_url: product?.image_url,
+        category: product?.category,
+      };
+
+      // Update state locally instead of reloading
+      setInventory(prev => [...prev, fullItem]);
+
       setSelectedProductId('');
       setStockQuantity('10');
       setShowAddForm(false);
       toast.success('Product added to machine');
-      loadMachineData();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to add product');
     }
@@ -1941,11 +1957,18 @@ function MachineDetails() {
                   required
                 >
                   <option value="">Select product...</option>
-                  {products.filter(p => !inventory.find(i => i.product_id === p.id)).map(product => (
-                    <option key={product.id} value={product.id}>
-                      {product.product_name} - ${product.price}
-                    </option>
-                  ))}
+                  {products.map(product => {
+                    const alreadyAdded = inventory.some(i => i.product_id === product.id);
+                    return (
+                      <option
+                        key={product.id}
+                        value={product.id}
+                        disabled={alreadyAdded}
+                      >
+                        {product.product_name} - ${product.price}{alreadyAdded ? ' (Already added)' : ''}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
               <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
