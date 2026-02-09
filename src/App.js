@@ -307,16 +307,19 @@ function VendorLogin() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleError, setGoogleError] = useState('');
   const [needsVerification, setNeedsVerification] = useState(false);
-  const [isSafari, setIsSafari] = useState(false);
+  const [useRedirectFlow, setUseRedirectFlow] = useState(false);
   const navigate = useNavigate();
   const googleButtonRef = useRef(null);
 
-  // Detect Safari/iOS browsers that block third-party cookies
+  // Detect mobile browsers and Safari that need redirect-based OAuth
+  // Mobile browsers block Google's popup sign-in flow
   useEffect(() => {
     const ua = navigator.userAgent;
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua) ||
+      (navigator.maxTouchPoints > 0 && window.innerWidth < 1024);
     const isSafariBrowser = /^((?!chrome|android).)*safari/i.test(ua) ||
       (/iPad|iPhone|iPod/.test(ua) && !window.MSStream);
-    setIsSafari(isSafariBrowser);
+    setUseRedirectFlow(isMobile || isSafariBrowser);
   }, []);
 
   const handleGoogleCallback = useCallback(async (response) => {
@@ -336,23 +339,25 @@ function VendorLogin() {
     }
   }, [navigate]);
 
-  // Handle Safari redirect-based Google Sign-In
-  const handleSafariGoogleSignIn = () => {
+  // Handle mobile/Safari redirect-based Google Sign-In (implicit flow)
+  const handleMobileGoogleSignIn = () => {
     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
     const redirectUri = `${window.location.origin}/auth/google/callback`;
     const scope = 'openid email profile';
+    const nonce = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
     const state = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
 
-    // Store state for verification
+    // Store nonce and state for verification
+    sessionStorage.setItem('google_oauth_nonce', nonce);
     sessionStorage.setItem('google_oauth_state', state);
 
     const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     authUrl.searchParams.set('client_id', clientId);
     authUrl.searchParams.set('redirect_uri', redirectUri);
-    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('response_type', 'id_token');
     authUrl.searchParams.set('scope', scope);
     authUrl.searchParams.set('state', state);
-    authUrl.searchParams.set('access_type', 'offline');
+    authUrl.searchParams.set('nonce', nonce);
     authUrl.searchParams.set('prompt', 'select_account');
 
     window.location.href = authUrl.toString();
@@ -361,7 +366,7 @@ function VendorLogin() {
   // Initialize Google Sign-In (for non-Safari browsers)
   useEffect(() => {
     // Skip GIS initialization for Safari - we use redirect flow instead
-    if (isSafari) {
+    if (useRedirectFlow) {
       return;
     }
 
@@ -410,7 +415,7 @@ function VendorLogin() {
         setGoogleError('Google Sign-In script not found.');
       }
     }
-  }, [handleGoogleCallback, isSafari]);
+  }, [handleGoogleCallback, useRedirectFlow]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -552,10 +557,10 @@ function VendorLogin() {
         {process.env.REACT_APP_GOOGLE_CLIENT_ID && process.env.REACT_APP_GOOGLE_CLIENT_ID !== 'your_google_client_id_here' ? (
           <div style={{ position: 'relative' }}>
             {/* Safari/iOS uses redirect flow due to third-party cookie restrictions */}
-            {isSafari ? (
+            {useRedirectFlow ? (
               <button
                 type="button"
-                onClick={handleSafariGoogleSignIn}
+                onClick={handleMobileGoogleSignIn}
                 disabled={googleLoading}
                 style={{
                   width: '100%',
@@ -584,7 +589,7 @@ function VendorLogin() {
             ) : (
               <div ref={googleButtonRef} style={{ width: '100%' }}></div>
             )}
-            {googleLoading && !isSafari && (
+            {googleLoading && !useRedirectFlow && (
               <div style={{
                 position: 'absolute',
                 top: 0,
@@ -4517,7 +4522,7 @@ function Home() {
 }
 
 // ============================================
-// GOOGLE AUTH CALLBACK COMPONENT (for Safari/redirect flow)
+// GOOGLE AUTH CALLBACK COMPONENT (for mobile/Safari redirect flow)
 // ============================================
 function GoogleAuthCallback() {
   const [error, setError] = useState('');
@@ -4527,9 +4532,12 @@ function GoogleAuthCallback() {
 
   useEffect(() => {
     const handleCallback = async () => {
-      const code = searchParams.get('code');
-      const state = searchParams.get('state');
-      const errorParam = searchParams.get('error');
+      // Implicit flow returns params in URL hash fragment
+      const hash = window.location.hash.substring(1);
+      const hashParams = new URLSearchParams(hash);
+      const idToken = hashParams.get('id_token');
+      const state = hashParams.get('state') || searchParams.get('state');
+      const errorParam = hashParams.get('error') || searchParams.get('error');
 
       if (errorParam) {
         if (errorParam === 'access_denied') {
@@ -4543,8 +4551,8 @@ function GoogleAuthCallback() {
         return;
       }
 
-      if (!code) {
-        setError('No authorization code received from Google. Tap "Try Again" to retry.');
+      if (!idToken) {
+        setError('No credentials received from Google. Tap "Try Again" to retry.');
         setLoading(false);
         return;
       }
@@ -4557,11 +4565,11 @@ function GoogleAuthCallback() {
         return;
       }
       sessionStorage.removeItem('google_oauth_state');
+      sessionStorage.removeItem('google_oauth_nonce');
 
       try {
-        // Exchange code for tokens via backend
-        const redirectUri = `${window.location.origin}/auth/google/callback`;
-        const result = await authAPI.vendorGoogleCodeExchange({ code, redirectUri });
+        // Send id_token to backend (same endpoint as popup flow)
+        const result = await authAPI.vendorGoogleLogin({ credential: idToken });
         const { token, refreshToken } = result.data.data;
 
         localStorage.setItem('token', token);
@@ -4601,15 +4609,17 @@ function GoogleAuthCallback() {
   const handleRetry = () => {
     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
     const redirectUri = `${window.location.origin}/auth/google/callback`;
+    const nonce = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
     const state = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+    sessionStorage.setItem('google_oauth_nonce', nonce);
     sessionStorage.setItem('google_oauth_state', state);
     const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     authUrl.searchParams.set('client_id', clientId);
     authUrl.searchParams.set('redirect_uri', redirectUri);
-    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('response_type', 'id_token');
     authUrl.searchParams.set('scope', 'openid email profile');
     authUrl.searchParams.set('state', state);
-    authUrl.searchParams.set('access_type', 'offline');
+    authUrl.searchParams.set('nonce', nonce);
     authUrl.searchParams.set('prompt', 'select_account');
     window.location.href = authUrl.toString();
   };
