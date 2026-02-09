@@ -200,7 +200,7 @@ function MobileNav({ isOpen, onClose, onLogout }) {
     { to: '/vendor/route-plan', label: 'Route Plan', icon: '📋' },
     { to: '/vendor/suggestions', label: 'Suggestions', icon: '💡' },
     { to: '/vendor/expiring', label: 'Expiring', icon: '⏰' },
-    { to: '/vendor/poll-summary', label: 'Polls', icon: '📊' },
+    { to: '/vendor/poll-summary', label: 'Shopping List', icon: '🛒' },
     { to: '/vendor/top-products', label: 'Top 50', icon: '🏆' },
   ];
 
@@ -1315,7 +1315,7 @@ function VendorDashboard() {
               )}
             </Link>
             <Link to="/vendor/poll-summary" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              📊 Polls
+              🛒 Shopping List
             </Link>
             <Link to="/vendor/top-products" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               🏆 Top 50
@@ -2861,31 +2861,33 @@ function PollSummary() {
   const toast = useToast();
 
   useEffect(() => {
-    const loadSummary = async () => {
+    const loadList = async () => {
       try {
-        const response = await vendorAPI.getPollSummary();
+        const response = await vendorAPI.getShoppingList();
         setProducts(response.data.data.products || []);
       } catch (err) {
-        toast.error('Failed to load poll summary');
+        toast.error('Failed to load shopping list');
       } finally {
         setLoading(false);
       }
     };
-    loadSummary();
+    loadList();
   }, [toast]);
 
-  const handleCopyShoppingList = () => {
-    const qualifying = products.filter(p => p.approval_rate >= 50 && p.total_votes > 0);
-    if (qualifying.length === 0) {
-      toast.warning('No products above 50% approval yet');
+  const buildShoppingText = () => {
+    const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const lines = products.map((p, i) =>
+      `${i + 1}. ${p.product_name} — ${p.total_yes} good marks across ${p.machine_count} machine${Number(p.machine_count) !== 1 ? 's' : ''}`
+    );
+    return `IDDI Shopping List (${date})\nBased on product performance across all machines\n\n${lines.join('\n')}`;
+  };
+
+  const handleCopy = () => {
+    if (products.length === 0) {
+      toast.warning('No products on the shopping list yet');
       return;
     }
-    const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    const lines = qualifying.map((p, i) =>
-      `${i + 1}. ${p.product_name} — ${p.approval_rate}% approval (${p.total_votes} votes)`
-    );
-    const text = `IDDI Shopping List (${date})\nBased on customer poll results\n\n${lines.join('\n')}`;
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(buildShoppingText());
     setCopied(true);
     toast.success('Shopping list copied to clipboard');
     setTimeout(() => setCopied(false), 2000);
@@ -2893,76 +2895,76 @@ function PollSummary() {
 
   if (loading) return <div style={styles.page}><p>Loading...</p></div>;
 
-  const qualifying = products.filter(p => p.approval_rate >= 50 && p.total_votes > 0);
-
   return (
     <div style={styles.page}>
       <Link to="/vendor/dashboard" style={{ ...styles.link, display: 'inline-block', marginBottom: '24px' }}>
         ← Back to Dashboard
       </Link>
 
-      <h1 style={{ margin: '0 0 8px 0' }}>Poll Summary</h1>
-      <p style={{ color: theme.textSecondary, margin: '0 0 32px 0' }}>
-        Aggregated results across all machines — {products.length} products polled
+      <h1 style={{ margin: '0 0 8px 0' }}>Shopping List</h1>
+      <p style={{ color: theme.textSecondary, margin: '0 0 12px 0' }}>
+        Based on your performance marks across all machines — not poll votes
+      </p>
+      <p style={{ color: theme.textMuted, fontSize: '13px', margin: '0 0 32px 0' }}>
+        Products you've marked as doing good (yes) or bad (no) on each machine. Only products with 5+ marks and at least 1 good mark appear here.
       </p>
 
-      {/* Results Section */}
       {products.length === 0 ? (
         <div style={{ ...styles.card, textAlign: 'center', padding: '48px' }}>
-          <p style={{ color: theme.textSecondary }}>No poll data yet. Create polls on your machines to see results here.</p>
+          <p style={{ fontSize: '36px', margin: '0 0 16px 0' }}>🛒</p>
+          <p style={{ fontWeight: '600', fontSize: '16px', margin: '0 0 8px 0' }}>No products qualify yet</p>
+          <p style={{ color: theme.textSecondary }}>Keep marking products as doing good or bad on your machines. Products need at least 5 performance marks with at least 1 good mark to show up here.</p>
         </div>
       ) : (
-        <div style={{ marginBottom: '40px' }}>
-          {products.map((product) => (
-            <div key={product.product_name} style={{ ...styles.card, marginBottom: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <div>
-                  <span style={{ fontWeight: '600', fontSize: '16px' }}>{product.product_name}</span>
-                  <span style={{ color: theme.textMuted, fontSize: '13px', marginLeft: '12px' }}>
-                    {product.machines_polled} machine{product.machines_polled !== 1 ? 's' : ''}
+        <>
+          <p style={{ color: theme.textMuted, fontSize: '13px', margin: '0 0 16px 0' }}>
+            {products.length} product{products.length !== 1 ? 's' : ''} doing well enough to restock
+          </p>
+          <div style={{ marginBottom: '40px' }}>
+            {products.map((product, i) => (
+              <div key={product.product_name} style={{ ...styles.card, marginBottom: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <div>
+                    <span style={{ fontWeight: '600', fontSize: '16px' }}>{i + 1}. {product.product_name}</span>
+                    {product.category && (
+                      <span style={{ color: theme.textMuted, fontSize: '12px', marginLeft: '10px', backgroundColor: theme.surfaceHover, padding: '2px 8px', borderRadius: '10px' }}>
+                        {product.category}
+                      </span>
+                    )}
+                  </div>
+                  <span style={{ fontWeight: 'bold', fontSize: '16px', color: theme.success }}>
+                    {product.total_yes} good
                   </span>
                 </div>
-                <span style={{ fontWeight: 'bold', fontSize: '18px', color: product.approval_rate >= 50 ? theme.success : theme.danger }}>
-                  {product.approval_rate}%
-                </span>
-              </div>
-              <div style={{ height: '10px', backgroundColor: theme.surfaceHover, borderRadius: '5px', overflow: 'hidden', marginBottom: '6px' }}>
-                <div style={{
-                  height: '100%',
-                  width: `${product.approval_rate}%`,
-                  backgroundColor: product.approval_rate >= 50 ? theme.success : theme.danger,
-                  borderRadius: '5px',
-                  transition: 'width 0.3s ease'
-                }} />
-              </div>
-              <p style={{ color: theme.textMuted, fontSize: '13px', margin: 0 }}>
-                {product.likes} likes / {product.total_votes} total votes
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Shopping List Section */}
-      {qualifying.length > 0 && (
-        <div style={styles.card}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h2 style={{ margin: 0 }}>Shopping List</h2>
-            <button onClick={handleCopyShoppingList} style={{ ...styles.button, ...styles.buttonSuccess }}>
-              {copied ? 'Copied!' : 'Copy Shopping List'}
-            </button>
-          </div>
-          <p style={{ color: theme.textSecondary, fontSize: '14px', margin: '0 0 16px 0' }}>
-            Products with over 50% customer approval, ranked by popularity
-          </p>
-          <div style={{ backgroundColor: theme.bg, borderRadius: '8px', padding: '16px', fontFamily: 'monospace', fontSize: '14px', lineHeight: '1.8' }}>
-            {qualifying.map((p, i) => (
-              <div key={p.product_name}>
-                {i + 1}. {p.product_name} — {p.approval_rate}% approval ({p.total_votes} votes)
+                <div style={{ height: '10px', backgroundColor: theme.surfaceHover, borderRadius: '5px', overflow: 'hidden', marginBottom: '6px' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${product.approval_rate}%`,
+                    backgroundColor: Number(product.approval_rate) >= 70 ? theme.success : theme.warning || '#f59e0b',
+                    borderRadius: '5px',
+                    transition: 'width 0.3s ease'
+                  }} />
+                </div>
+                <p style={{ color: theme.textMuted, fontSize: '13px', margin: 0 }}>
+                  {product.total_yes} good / {product.total_no} bad marks — across {product.machine_count} machine{Number(product.machine_count) !== 1 ? 's' : ''} — {product.total_marks} total marks
+                </p>
               </div>
             ))}
           </div>
-        </div>
+
+          {/* Copyable Preview */}
+          <div style={styles.card}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ margin: 0 }}>Shopping List</h2>
+              <button onClick={handleCopy} style={{ ...styles.button, ...styles.buttonSuccess }}>
+                {copied ? 'Copied!' : 'Copy Shopping List'}
+              </button>
+            </div>
+            <div style={{ backgroundColor: theme.bg, borderRadius: '8px', padding: '16px', fontFamily: 'monospace', fontSize: '14px', lineHeight: '1.8', whiteSpace: 'pre-wrap' }}>
+              {buildShoppingText()}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
@@ -3070,10 +3072,6 @@ function AnalyticsDashboard() {
               <div style={{ color: theme.textMuted, fontSize: '14px', marginBottom: '8px' }}>Suggestions</div>
               <div style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: 'bold', color: theme.success }}>{analytics.today?.suggestions || 0}</div>
             </div>
-            <div style={styles.card}>
-              <div style={{ color: theme.textMuted, fontSize: '14px', marginBottom: '8px' }}>Unique Visitors</div>
-              <div style={{ fontSize: 'clamp(20px, 5vw, 28px)', fontWeight: 'bold', color: theme.secondary }}>{analytics.today?.uniqueSessions || 0}</div>
-            </div>
           </div>
 
           {/* This Week's Stats */}
@@ -3100,18 +3098,6 @@ function AnalyticsDashboard() {
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: '14px' }}>vs last week</div>
                   {formatChange(analytics.weekOverWeek?.pollVotesChange || 0)}
-                </div>
-              </div>
-            </div>
-            <div style={styles.card}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ color: theme.textMuted, fontSize: '14px', marginBottom: '8px' }}>Unique Visitors</div>
-                  <div style={{ fontSize: '28px', fontWeight: 'bold', color: theme.secondary }}>{analytics.thisWeek?.uniqueSessions || 0}</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '14px' }}>vs last week</div>
-                  {formatChange(analytics.weekOverWeek?.sessionsChange || 0)}
                 </div>
               </div>
             </div>
@@ -3393,12 +3379,9 @@ function TopProducts() {
               <div style={{ flex: 1 }}>
                 <h4 style={{ margin: 0 }}>{product.product_name}</h4>
                 <p style={{ color: theme.textMuted, margin: 0, fontSize: '14px' }}>
-                  In {product.total_machines} machines
-                  {product.unique_vendors > 0 && (
-                    <span style={{ marginLeft: '8px', color: theme.primary }}>
-                      • Rated by {product.unique_vendors} vendor{product.unique_vendors !== 1 ? 's' : ''}
-                    </span>
-                  )}
+                  {product.unique_vendors > 0
+                    ? `Used by ${product.unique_vendors} vendor${product.unique_vendors !== 1 ? 's' : ''}`
+                    : ''}
                 </p>
               </div>
 

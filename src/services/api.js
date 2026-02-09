@@ -197,6 +197,7 @@ export const vendorAPI = {
   getPollResults: (pollId) => api.get(`/vendor/polls/${pollId}/results`),
   getSwipeResults: (machineId) => api.get(`/vendor/machines/${machineId}/swipe-results`),
   getPollSummary: () => api.get('/vendor/poll-summary'),
+  getShoppingList: () => api.get('/vendor/shopping-list'),
 
   // Product Redistribution
   getRedistributionTargets: (machineId, productId) =>
