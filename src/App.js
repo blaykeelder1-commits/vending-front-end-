@@ -3627,21 +3627,29 @@ function CustomerMachine() {
   const { qr_token } = useParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [machineId, setMachineId] = useState(null);
+  const [initData, setInitData] = useState(null);
 
   useEffect(() => {
     const initMachine = async () => {
       try {
-        const resolveResponse = await publicAPI.resolveMachineQR(qr_token);
-        const id = resolveResponse.data.data.machineId;
+        // Single API call does everything: resolve QR, create session, check completion, load polls
+        const response = await customerAPI.initSession(qr_token);
+        const data = response.data.data;
 
-        const sessionResponse = await customerAPI.setMachine({ machineId: id });
-        const sessionToken = sessionResponse.data.data.sessionToken;
+        localStorage.setItem('token', data.sessionToken);
+        localStorage.setItem('selectedMachineId', data.machine.id.toString());
 
-        localStorage.setItem('token', sessionToken);
-        localStorage.setItem('selectedMachineId', id.toString());
-        setMachineId(id);
+        // Preload product images immediately so they're cached by the time user sees them
+        if (data.products && data.products.length > 0) {
+          data.products.forEach(p => {
+            if (p.image_url) {
+              const img = new Image();
+              img.src = p.image_url;
+            }
+          });
+        }
 
+        setInitData(data);
         setLoading(false);
       } catch (err) {
         setError(err.response?.data?.message || 'Failed to access machine');
@@ -3677,16 +3685,17 @@ function CustomerMachine() {
     );
   }
 
-  return <CustomerSwipe machineId={machineId} />;
+  return <CustomerSwipe initData={initData} />;
 }
 
-function CustomerSwipe({ machineId }) {
-  const [poll, setPoll] = useState(null);
-  const [products, setProducts] = useState([]);
+function CustomerSwipe({ initData }) {
+  const machineId = initData.machine.id;
+  const [poll, setPoll] = useState(initData.poll);
+  const [products, setProducts] = useState(initData.products || []);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [completed, setCompleted] = useState(false);
-  const [alreadyVoted, setAlreadyVoted] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [completed, setCompleted] = useState(!initData.poll || (initData.products || []).length === 0);
+  const [alreadyVoted, setAlreadyVoted] = useState(initData.alreadyVoted || false);
+  const [loading] = useState(false); // No loading needed - data arrives via props
   const [swiping, setSwiping] = useState(null);
   const [suggestion, setSuggestion] = useState('');
   const [suggestionSubmitted, setSuggestionSubmitted] = useState(false);
@@ -3694,6 +3703,7 @@ function CustomerSwipe({ machineId }) {
   const [cardEntering, setCardEntering] = useState(true);
   const cardRef = useRef(null);
   const toast = useToast();
+  const nextPollDate = initData.nextPollDate;
 
   // Touch/swipe state
   const touchStartRef = useRef({ x: 0, y: 0 });
@@ -3712,59 +3722,6 @@ function CustomerSwipe({ machineId }) {
       toast.error('Failed to submit suggestion');
     } finally {
       setSubmittingSuggestion(false);
-    }
-  };
-
-  useEffect(() => {
-    const init = async () => {
-      // Quick client-side check first
-      const localKey = `iddi_poll_completed_machine_${machineId}`;
-      const localCompleted = localStorage.getItem(localKey);
-      if (localCompleted) {
-        const completedAt = parseInt(localCompleted, 10);
-        if (Date.now() - completedAt < 24 * 60 * 60 * 1000) {
-          setAlreadyVoted(true);
-          setLoading(false);
-          return;
-        }
-        localStorage.removeItem(localKey);
-      }
-
-      // Server-side check via device fingerprint
-      try {
-        const checkRes = await customerAPI.checkPollCompletion();
-        if (checkRes.data?.data?.completed) {
-          setAlreadyVoted(true);
-          setLoading(false);
-          return;
-        }
-      } catch (err) {
-        // Non-critical: continue to load polls even if check fails
-      }
-
-      loadPolls();
-    };
-
-    init();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [machineId]);
-
-  const loadPolls = async () => {
-    try {
-      const response = await customerAPI.getPolls();
-      const data = response.data.data;
-
-      if (!data.poll || data.products.length === 0) {
-        setCompleted(true);
-      } else {
-        setPoll(data.poll);
-        setProducts(data.products);
-      }
-    } catch (err) {
-      toast.error('Failed to load polls');
-      setCompleted(true);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -3865,7 +3822,7 @@ function CustomerSwipe({ machineId }) {
             Your feedback has been recorded. Thanks for helping us improve!
           </p>
           <p style={{ color: theme.textMuted, margin: 0, fontSize: '14px' }}>
-            Polls refresh every 24 hours. Check back soon!
+            {nextPollDate ? `Next poll opens ${new Date(nextPollDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.` : 'Check back next month!'}
           </p>
         </div>
       </div>

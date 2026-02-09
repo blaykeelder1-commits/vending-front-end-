@@ -239,7 +239,14 @@ export const vendorAPI = {
 
 // Customer API (Anonymous)
 export const customerAPI = {
-  // Machine session
+  // Combined init: resolve QR + create session + check completion + load polls (1 round trip)
+  initSession: (qr_token) => {
+    const screenResolution = `${window.screen.width}x${window.screen.height}`;
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return api.post('/customer/init-session', { qr_token, screenResolution, timezone });
+  },
+
+  // Machine session (legacy)
   setMachine: (data) => {
     const screenResolution = `${window.screen.width}x${window.screen.height}`;
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
