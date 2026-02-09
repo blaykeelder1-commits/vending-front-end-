@@ -1631,6 +1631,8 @@ function MachineDetails() {
   const [expandedPollId, setExpandedPollId] = useState(null);
   const [expandedResults, setExpandedResults] = useState(null);
   const [expandedLoading, setExpandedLoading] = useState(false);
+  const [pendingMarks, setPendingMarks] = useState({});
+  const [submittingVisit, setSubmittingVisit] = useState(false);
   // Visit history state
   const [visitChanges, setVisitChanges] = useState(null);
   const [showVisitDetails, setShowVisitDetails] = useState(false);
@@ -1725,21 +1727,34 @@ function MachineDetails() {
     }
   };
 
-  const handleSetPerformance = async (inventoryId, isPerforming) => {
-    // Save previous value for revert (could be true, false, or null)
-    const previousValue = inventory.find(item => item.id === inventoryId)?.is_performing;
-    // Optimistic local update
-    setInventory(prev => prev.map(item =>
-      item.id === inventoryId ? { ...item, is_performing: isPerforming } : item
-    ));
+  const handleSetPerformance = (inventoryId, isPerforming) => {
+    setPendingMarks(prev => {
+      // Tapping the same value again deselects it
+      if (prev[inventoryId] === isPerforming) {
+        const next = { ...prev };
+        delete next[inventoryId];
+        return next;
+      }
+      return { ...prev, [inventoryId]: isPerforming };
+    });
+  };
+
+  const handleSubmitVisit = async () => {
+    const marks = Object.entries(pendingMarks).map(([inventoryId, isPerforming]) => ({
+      inventoryId: parseInt(inventoryId),
+      isPerforming,
+    }));
+    if (marks.length === 0) return;
+    setSubmittingVisit(true);
     try {
-      await vendorAPI.setPerformance(id, inventoryId, { isPerforming });
+      const res = await vendorAPI.commitPerformance(id, { marks });
+      setInventory(res.data.data.inventory);
+      setPendingMarks({});
+      toast.success(`Visit submitted: ${marks.length} product(s) marked`);
     } catch (err) {
-      // Revert on failure to the actual previous value
-      setInventory(prev => prev.map(item =>
-        item.id === inventoryId ? { ...item, is_performing: previousValue } : item
-      ));
-      toast.error(err.response?.data?.message || 'Failed to update performance');
+      toast.error(err.response?.data?.message || 'Failed to submit visit');
+    } finally {
+      setSubmittingVisit(false);
     }
   };
 
@@ -2175,8 +2190,8 @@ function MachineDetails() {
                     border: 'none',
                     cursor: 'pointer',
                     fontWeight: '600',
-                    backgroundColor: item.is_performing === true ? theme.success : theme.surfaceHover,
-                    color: item.is_performing === true ? 'white' : theme.textSecondary,
+                    backgroundColor: pendingMarks[item.id] === true ? theme.success : theme.surfaceHover,
+                    color: pendingMarks[item.id] === true ? 'white' : theme.textSecondary,
                   }}
                 >
                   ✓ Yes
@@ -2190,8 +2205,8 @@ function MachineDetails() {
                     border: 'none',
                     cursor: 'pointer',
                     fontWeight: '600',
-                    backgroundColor: item.is_performing === false ? theme.danger : theme.surfaceHover,
-                    color: item.is_performing === false ? 'white' : theme.textSecondary,
+                    backgroundColor: pendingMarks[item.id] === false ? theme.danger : theme.surfaceHover,
+                    color: pendingMarks[item.id] === false ? 'white' : theme.textSecondary,
                   }}
                 >
                   ✗ No
@@ -2272,6 +2287,26 @@ function MachineDetails() {
             </div>
           ))}
         </div>
+
+        {/* Submit Visit Button */}
+        {Object.keys(pendingMarks).length > 0 && (
+          <button
+            onClick={handleSubmitVisit}
+            disabled={submittingVisit}
+            style={{
+              ...styles.button,
+              marginTop: '16px',
+              backgroundColor: theme.success,
+              opacity: submittingVisit ? 0.7 : 1,
+              fontSize: '16px',
+              padding: '14px',
+            }}
+          >
+            {submittingVisit
+              ? 'Submitting...'
+              : `Submit Visit (${Object.keys(pendingMarks).length}/${inventory.length} products marked)`}
+          </button>
+        )}
 
         {inventory.length === 0 && (
           <div style={{ ...styles.card, textAlign: 'center', padding: '48px' }}>

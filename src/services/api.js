@@ -183,6 +183,8 @@ export const vendorAPI = {
   // Performance tracking
   setPerformance: (machineId, inventoryId, data) =>
     api.put(`/vendor/machines/${machineId}/inventory/${inventoryId}/performance`, data),
+  commitPerformance: (machineId, data) =>
+    api.post(`/vendor/machines/${machineId}/performance-commit`, data),
   getPerformanceComparison: (productId) =>
     api.get(`/vendor/performance-comparison?productId=${productId}`),
 
