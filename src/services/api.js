@@ -91,6 +91,21 @@ api.interceptors.response.use(
       }
     }
 
+    // Handle 429 Too Many Requests - auto-retry after delay
+    if (status === 429 && !originalRequest._rateLimitRetry) {
+      const retryAfter = parseInt(error.response.headers['retry-after'] || '5', 10);
+      const waitMs = retryAfter * 1000;
+      error.userMessage = `Too many requests. Retrying in ${retryAfter} seconds...`;
+      originalRequest._rateLimitRetry = true;
+      await new Promise(resolve => setTimeout(resolve, waitMs));
+      return api(originalRequest);
+    }
+    if (status === 429) {
+      const retryAfter = error.response.headers['retry-after'] || '60';
+      error.userMessage = `Rate limited. Please wait ${retryAfter} seconds before trying again.`;
+      return Promise.reject(error);
+    }
+
     console.error('API Error:', status, message);
 
     // Handle 401 Unauthorized - clear auth and redirect to login
@@ -134,6 +149,7 @@ export const authAPI = {
   vendorRegister: (data) => api.post('/auth/vendor/register', data),
   vendorLogin: (data) => api.post('/auth/vendor/login', data),
   vendorGoogleLogin: (data) => api.post('/auth/vendor/google', data),
+  vendorGoogleCodeExchange: (data) => api.post('/auth/vendor/google/callback', data),
   verifyEmail: (data) => api.post('/auth/vendor/verify-email', data),
   resendVerification: (data) => api.post('/auth/vendor/resend-verification', data),
   forgotPassword: (data) => api.post('/auth/vendor/forgot-password', data),
@@ -240,5 +256,13 @@ export const customerAPI = {
 export const publicAPI = {
   resolveMachineQR: (qr_token) => api.get(`/auth/public/machines/by-qr/${qr_token}`),
 };
+
+// Wake up backend on app init (Render cold start mitigation)
+export const wakeBackend = () => {
+  api.get('/health').catch(() => {});
+};
+
+// Fire immediately on module load
+wakeBackend();
 
 export default api;

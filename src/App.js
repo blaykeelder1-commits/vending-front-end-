@@ -307,8 +307,17 @@ function VendorLogin() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleError, setGoogleError] = useState('');
   const [needsVerification, setNeedsVerification] = useState(false);
+  const [isSafari, setIsSafari] = useState(false);
   const navigate = useNavigate();
   const googleButtonRef = useRef(null);
+
+  // Detect Safari/iOS browsers that block third-party cookies
+  useEffect(() => {
+    const ua = navigator.userAgent;
+    const isSafariBrowser = /^((?!chrome|android).)*safari/i.test(ua) ||
+      (/iPad|iPhone|iPod/.test(ua) && !window.MSStream);
+    setIsSafari(isSafariBrowser);
+  }, []);
 
   const handleGoogleCallback = useCallback(async (response) => {
     setError('');
@@ -327,8 +336,35 @@ function VendorLogin() {
     }
   }, [navigate]);
 
-  // Initialize Google Sign-In
+  // Handle Safari redirect-based Google Sign-In
+  const handleSafariGoogleSignIn = () => {
+    const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
+    const redirectUri = `${window.location.origin}/auth/google/callback`;
+    const scope = 'openid email profile';
+    const state = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+
+    // Store state for verification
+    sessionStorage.setItem('google_oauth_state', state);
+
+    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    authUrl.searchParams.set('client_id', clientId);
+    authUrl.searchParams.set('redirect_uri', redirectUri);
+    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('scope', scope);
+    authUrl.searchParams.set('state', state);
+    authUrl.searchParams.set('access_type', 'offline');
+    authUrl.searchParams.set('prompt', 'select_account');
+
+    window.location.href = authUrl.toString();
+  };
+
+  // Initialize Google Sign-In (for non-Safari browsers)
   useEffect(() => {
+    // Skip GIS initialization for Safari - we use redirect flow instead
+    if (isSafari) {
+      return;
+    }
+
     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
     if (!clientId || clientId === 'your_google_client_id_here') {
       setGoogleError('Google Sign-In not configured');
@@ -356,31 +392,25 @@ function VendorLogin() {
       }
     };
 
-    // Poll for Google script with increasing intervals, up to 15 seconds
-    let attempts = 0;
-    const maxAttempts = 30;
-    const poll = () => {
-      if (window.google) {
-        initializeGoogleSignIn();
-        return;
-      }
-      attempts++;
-      if (attempts >= maxAttempts) {
-        setGoogleError('Google Sign-In failed to load. Check your connection.');
-        return;
-      }
-      timerId = setTimeout(poll, 500);
-    };
-
-    let timerId = null;
     if (window.google) {
       initializeGoogleSignIn();
     } else {
-      timerId = setTimeout(poll, 500);
+      // Use load event listener instead of polling for faster detection
+      const scriptEl = document.querySelector('script[src*="accounts.google.com/gsi/client"]');
+      if (scriptEl) {
+        const onLoad = () => initializeGoogleSignIn();
+        const onError = () => setGoogleError('Google Sign-In failed to load. Check your connection.');
+        scriptEl.addEventListener('load', onLoad);
+        scriptEl.addEventListener('error', onError);
+        return () => {
+          scriptEl.removeEventListener('load', onLoad);
+          scriptEl.removeEventListener('error', onError);
+        };
+      } else {
+        setGoogleError('Google Sign-In script not found.');
+      }
     }
-
-    return () => { if (timerId) clearTimeout(timerId); };
-  }, [handleGoogleCallback]);
+  }, [handleGoogleCallback, isSafari]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -521,8 +551,40 @@ function VendorLogin() {
         {/* Google Sign-In Button */}
         {process.env.REACT_APP_GOOGLE_CLIENT_ID && process.env.REACT_APP_GOOGLE_CLIENT_ID !== 'your_google_client_id_here' ? (
           <div style={{ position: 'relative' }}>
-            <div ref={googleButtonRef} style={{ width: '100%' }}></div>
-            {googleLoading && (
+            {/* Safari/iOS uses redirect flow due to third-party cookie restrictions */}
+            {isSafari ? (
+              <button
+                type="button"
+                onClick={handleSafariGoogleSignIn}
+                disabled={googleLoading}
+                style={{
+                  width: '100%',
+                  padding: '10px 16px',
+                  backgroundColor: '#fff',
+                  border: '1px solid #dadce0',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  color: '#3c4043',
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                {googleLoading ? 'Signing in...' : 'Continue with Google'}
+              </button>
+            ) : (
+              <div ref={googleButtonRef} style={{ width: '100%' }}></div>
+            )}
+            {googleLoading && !isSafari && (
               <div style={{
                 position: 'absolute',
                 top: 0,
@@ -1519,9 +1581,14 @@ function MachineDetails() {
   const [showVisitDetails, setShowVisitDetails] = useState(false);
   const toast = useToast();
 
-  const loadMachineData = useCallback(async () => {
+  const initialLoadDone = useRef(false);
+
+  const loadMachineData = useCallback(async (isBackground = false) => {
     try {
-      setLoading(true);
+      // Only show full-page loading on initial load
+      if (!isBackground && !initialLoadDone.current) {
+        setLoading(true);
+      }
       const [machineRes, inventoryRes, productsRes, pollsRes, visitRes] = await Promise.allSettled([
         vendorAPI.getMachine(id),
         vendorAPI.getMachineInventory(id),
@@ -1562,6 +1629,7 @@ function MachineDetails() {
       toast.error('Failed to load machine data');
     } finally {
       setLoading(false);
+      initialLoadDone.current = true;
     }
   }, [id, toast]);
 
@@ -1595,7 +1663,7 @@ function MachineDetails() {
 
       setSelectedProductId('');
       setStockQuantity('10');
-      setShowAddForm(false);
+      // Keep add form open so user can add multiple products
       toast.success('Product added to machine');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to add product');
@@ -1603,21 +1671,32 @@ function MachineDetails() {
   };
 
   const handleSetPerformance = async (inventoryId, isPerforming) => {
+    // Optimistic local update
+    setInventory(prev => prev.map(item =>
+      item.id === inventoryId ? { ...item, is_performing: isPerforming } : item
+    ));
     try {
       await vendorAPI.setPerformance(id, inventoryId, { isPerforming });
-      loadMachineData();
     } catch (err) {
+      // Revert on failure
+      setInventory(prev => prev.map(item =>
+        item.id === inventoryId ? { ...item, is_performing: !isPerforming } : item
+      ));
       toast.error(err.response?.data?.message || 'Failed to update performance');
     }
   };
 
   const handleRemoveProduct = async (inventoryId) => {
     if (!window.confirm('Remove this product from the machine?')) return;
+    // Optimistic local update - save previous state for revert
+    const previousInventory = inventory;
+    setInventory(prev => prev.filter(item => item.id !== inventoryId));
     try {
       await vendorAPI.removeFromInventory(id, inventoryId);
       toast.success('Product removed from machine');
-      loadMachineData();
     } catch (err) {
+      // Revert on failure
+      setInventory(previousInventory);
       toast.error(err.response?.data?.message || 'Failed to remove product');
     }
   };
@@ -1641,11 +1720,17 @@ function MachineDetails() {
   };
 
   const handleSetExpiration = async (inventoryId, date) => {
+    // Optimistic local update
+    const previousInventory = inventory;
+    setInventory(prev => prev.map(item =>
+      item.id === inventoryId ? { ...item, expiration_date: date } : item
+    ));
     try {
       await vendorAPI.updateExpirationDate(id, inventoryId, date);
       toast.success('Expiration date updated');
-      loadMachineData();
     } catch (err) {
+      // Revert on failure
+      setInventory(previousInventory);
       toast.error(err.response?.data?.message || 'Failed to update expiration date');
     }
   };
@@ -1727,7 +1812,7 @@ function MachineDetails() {
       setSelectedTargetMachine(null);
       setTransferQuantity(1);
       setShowRedistribution(false);
-      loadMachineData();
+      loadMachineData(true);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to execute redistribution');
     } finally {
@@ -2022,6 +2107,40 @@ function MachineDetails() {
                 </button>
               </div>
 
+              {/* Performance History Bar */}
+              {(item.performance_yes_count > 0 || item.performance_no_count > 0) && (() => {
+                const yesCount = item.performance_yes_count || 0;
+                const noCount = item.performance_no_count || 0;
+                const total = yesCount + noCount;
+                const yesPercent = total > 0 ? (yesCount / total) * 100 : 0;
+                return (
+                  <div style={{ marginBottom: '10px' }} title={`Marked good ${yesCount} times, bad ${noCount} times in this machine`}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{
+                        flex: 1,
+                        height: '6px',
+                        borderRadius: '3px',
+                        backgroundColor: theme.danger,
+                        overflow: 'hidden',
+                      }}>
+                        <div style={{
+                          width: `${yesPercent}%`,
+                          height: '100%',
+                          backgroundColor: theme.success,
+                          borderRadius: yesPercent === 100 ? '3px' : '3px 0 0 3px',
+                          transition: 'width 0.3s ease',
+                        }} />
+                      </div>
+                      <span style={{ fontSize: '12px', color: theme.textMuted, whiteSpace: 'nowrap' }}>
+                        <span style={{ color: theme.success, fontWeight: '600' }}>{yesCount}</span>
+                        {' / '}
+                        <span style={{ color: theme.danger, fontWeight: '600' }}>{noCount}</span>
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Performance Toggle */}
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
@@ -2268,7 +2387,7 @@ function MachineDetails() {
           </button>
         </div>
 
-        {showPollForm && <SwipePollForm machineId={id} onSuccess={() => { setShowPollForm(false); loadMachineData(); }} />}
+        {showPollForm && <SwipePollForm machineId={id} onSuccess={() => { setShowPollForm(false); loadMachineData(true); }} />}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
           {polls.map(poll => (
@@ -4209,10 +4328,156 @@ function Home() {
 }
 
 // ============================================
+// GOOGLE AUTH CALLBACK COMPONENT (for Safari/redirect flow)
+// ============================================
+function GoogleAuthCallback() {
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const handleCallback = async () => {
+      const code = searchParams.get('code');
+      const state = searchParams.get('state');
+      const errorParam = searchParams.get('error');
+
+      if (errorParam) {
+        if (errorParam === 'access_denied') {
+          setError('Sign-in was cancelled. Tap "Try Again" to retry.');
+        } else if (errorParam === 'unauthorized_client' || errorParam === 'invalid_client') {
+          setError('Google sign-in is not properly configured. Please contact support.');
+        } else {
+          setError(`Google sign-in failed (${errorParam}). Tap "Try Again" to retry.`);
+        }
+        setLoading(false);
+        return;
+      }
+
+      if (!code) {
+        setError('No authorization code received from Google. Tap "Try Again" to retry.');
+        setLoading(false);
+        return;
+      }
+
+      // Verify state to prevent CSRF
+      const savedState = sessionStorage.getItem('google_oauth_state');
+      if (state !== savedState) {
+        setError('Invalid state parameter. Please try signing in again.');
+        setLoading(false);
+        return;
+      }
+      sessionStorage.removeItem('google_oauth_state');
+
+      try {
+        // Exchange code for tokens via backend
+        const redirectUri = `${window.location.origin}/auth/google/callback`;
+        const result = await authAPI.vendorGoogleCodeExchange({ code, redirectUri });
+        const { token, refreshToken } = result.data.data;
+
+        localStorage.setItem('token', token);
+        if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+        localStorage.setItem('userType', 'vendor');
+
+        navigate('/vendor/dashboard', { replace: true });
+      } catch (err) {
+        console.error('Google auth callback error:', err);
+        const status = err.response?.status;
+        const msg = err.response?.data?.message;
+        if (!err.response) {
+          setError('Network error - could not reach the server. The server may be starting up, please try again in a moment.');
+        } else if (status === 401 || status === 403) {
+          setError(msg || 'Google authorization was blocked. The app may need to be configured in Google Cloud Console.');
+        } else {
+          setError(msg || 'Failed to complete Google sign-in. Please try again.');
+        }
+        setLoading(false);
+      }
+    };
+
+    handleCallback();
+  }, [searchParams, navigate]);
+
+  if (loading) {
+    return (
+      <div style={{ ...styles.page, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ width: 40, height: 40, border: '3px solid #e5e7eb', borderTopColor: '#3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
+          <p style={{ color: theme.textSecondary }}>Completing Google sign-in...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const handleRetry = () => {
+    const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
+    const redirectUri = `${window.location.origin}/auth/google/callback`;
+    const state = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+    sessionStorage.setItem('google_oauth_state', state);
+    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    authUrl.searchParams.set('client_id', clientId);
+    authUrl.searchParams.set('redirect_uri', redirectUri);
+    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('scope', 'openid email profile');
+    authUrl.searchParams.set('state', state);
+    authUrl.searchParams.set('access_type', 'offline');
+    authUrl.searchParams.set('prompt', 'select_account');
+    window.location.href = authUrl.toString();
+  };
+
+  return (
+    <div style={{ ...styles.page, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+      <div style={{ ...styles.card, maxWidth: 400, textAlign: 'center' }}>
+        <h2 style={{ color: theme.danger, marginBottom: 16 }}>Sign-in Failed</h2>
+        <p style={{ color: theme.textSecondary, marginBottom: 24 }}>{error}</p>
+        <div style={{ display: 'flex', gap: '12px', flexDirection: 'column' }}>
+          <button
+            onClick={handleRetry}
+            style={{ ...styles.button, width: '100%' }}
+          >
+            Try Again with Google
+          </button>
+          <button
+            onClick={() => navigate('/vendor/login')}
+            style={{ ...styles.button, ...styles.buttonSecondary, width: '100%' }}
+          >
+            Back to Login
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
 // PROTECTED ROUTE COMPONENT
 // ============================================
+// Decode JWT payload without verification (for optimistic local check)
+function decodeJwtPayload(token) {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
 function ProtectedRoute({ children }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(null);
+  // 'optimistic' = rendered based on local JWT check, verifying in background
+  // true = fully verified, false = not authenticated
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    // Optimistic: check JWT locally on first render
+    const token = localStorage.getItem('token');
+    const userType = localStorage.getItem('userType');
+    if (!token || userType !== 'vendor') return null;
+    const payload = decodeJwtPayload(token);
+    if (!payload || !payload.exp) return null;
+    // If token expires in the future, optimistically render
+    if (payload.exp * 1000 > Date.now()) return 'optimistic';
+    return null;
+  });
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -4227,11 +4492,18 @@ function ProtectedRoute({ children }) {
       }
 
       try {
-        // Verify token with backend
+        // Verify token with backend (background check)
         await authAPI.verify();
         setIsAuthenticated(true);
       } catch (error) {
+        // Token invalid on server - try refresh before kicking out
+        const refreshToken = localStorage.getItem('refreshToken');
+        if (refreshToken) {
+          // The interceptor will handle refresh automatically on next API call
+          // Just mark as failed so user gets redirected
+        }
         localStorage.removeItem('token');
+        localStorage.removeItem('refreshToken');
         localStorage.removeItem('userType');
         setIsAuthenticated(false);
       }
@@ -4240,7 +4512,7 @@ function ProtectedRoute({ children }) {
     checkAuth();
   }, []);
 
-  // Show loading state while checking auth
+  // Show loading only if we couldn't do an optimistic check
   if (isAuthenticated === null) {
     return (
       <div style={{
@@ -4267,10 +4539,11 @@ function ProtectedRoute({ children }) {
   }
 
   // Redirect to login if not authenticated
-  if (!isAuthenticated) {
+  if (isAuthenticated === false) {
     return <Navigate to="/vendor/login" replace />;
   }
 
+  // Render immediately for 'optimistic' or true
   return children;
 }
 
@@ -4281,6 +4554,9 @@ function App() {
         <Router>
           <Routes>
             <Route path="/" element={<Home />} />
+
+            {/* Auth Callback Routes */}
+            <Route path="/auth/google/callback" element={<GoogleAuthCallback />} />
 
             {/* Vendor Auth Routes (Public) */}
             <Route path="/vendor/login" element={<VendorLogin />} />
