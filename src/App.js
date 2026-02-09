@@ -2109,40 +2109,6 @@ function MachineDetails() {
                 </button>
               </div>
 
-              {/* Performance History Bar */}
-              {(item.performance_yes_count > 0 || item.performance_no_count > 0) && (() => {
-                const yesCount = item.performance_yes_count || 0;
-                const noCount = item.performance_no_count || 0;
-                const total = yesCount + noCount;
-                const yesPercent = total > 0 ? (yesCount / total) * 100 : 0;
-                return (
-                  <div style={{ marginBottom: '10px' }} title={`Marked good ${yesCount} times, bad ${noCount} times in this machine`}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{
-                        flex: 1,
-                        height: '6px',
-                        borderRadius: '3px',
-                        backgroundColor: theme.danger,
-                        overflow: 'hidden',
-                      }}>
-                        <div style={{
-                          width: `${yesPercent}%`,
-                          height: '100%',
-                          backgroundColor: theme.success,
-                          borderRadius: yesPercent === 100 ? '3px' : '3px 0 0 3px',
-                          transition: 'width 0.3s ease',
-                        }} />
-                      </div>
-                      <span style={{ fontSize: '12px', color: theme.textMuted, whiteSpace: 'nowrap' }}>
-                        <span style={{ color: theme.success, fontWeight: '600' }}>{yesCount}</span>
-                        {' / '}
-                        <span style={{ color: theme.danger, fontWeight: '600' }}>{noCount}</span>
-                      </span>
-                    </div>
-                  </div>
-                );
-              })()}
-
               {/* Performance Toggle */}
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
@@ -2178,8 +2144,8 @@ function MachineDetails() {
               </div>
 
               {/* Expiration Date */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
-                <span style={{ fontSize: '12px', color: theme.textMuted }}>Expires:</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
+                <span style={{ fontSize: '13px', color: theme.textSecondary, fontWeight: '600' }}>Expires:</span>
                 <input
                   type="date"
                   defaultValue={item.expiration_date?.split('T')[0] || ''}
@@ -2190,8 +2156,8 @@ function MachineDetails() {
                   }}
                   style={{
                     ...styles.input,
-                    padding: '4px 8px',
-                    fontSize: '12px',
+                    padding: '8px 10px',
+                    fontSize: '14px',
                     flex: 1,
                   }}
                 />
@@ -2220,6 +2186,34 @@ function MachineDetails() {
                   Marked: {new Date(item.performance_marked_at).toLocaleDateString()}
                 </p>
               )}
+
+              {/* Performance Tally Marks */}
+              {(item.performance_yes_count > 0 || item.performance_no_count > 0) && (() => {
+                const yesCount = item.performance_yes_count || 0;
+                const noCount = item.performance_no_count || 0;
+                const makeTallies = (count) => {
+                  const groups = [];
+                  const fullGroups = Math.floor(count / 5);
+                  const remainder = count % 5;
+                  for (let i = 0; i < fullGroups; i++) groups.push('|||||');
+                  if (remainder > 0) groups.push('|'.repeat(remainder));
+                  return groups.join(' ');
+                };
+                return (
+                  <div style={{ display: 'flex', gap: '12px', marginTop: '6px', fontSize: '14px', fontFamily: 'monospace', letterSpacing: '1px' }}>
+                    {yesCount > 0 && (
+                      <span style={{ color: theme.success, fontWeight: '700' }} title={`Marked good ${yesCount} times`}>
+                        {makeTallies(yesCount)} <span style={{ fontSize: '11px', fontFamily: 'inherit' }}>({yesCount})</span>
+                      </span>
+                    )}
+                    {noCount > 0 && (
+                      <span style={{ color: theme.danger, fontWeight: '700' }} title={`Marked bad ${noCount} times`}>
+                        {makeTallies(noCount)} <span style={{ fontSize: '11px', fontFamily: 'inherit' }}>({noCount})</span>
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           ))}
         </div>
