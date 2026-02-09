@@ -778,3 +778,26 @@ button,
     border: 2px solid currentColor;
   }
 }
+
+/* ============================================
+   SWIPE POLL CARD ANIMATIONS
+   ============================================ */
+
+@keyframes cardSlideIn {
+  from {
+    transform: scale(0.9) translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Touch-only devices: enhanced button feedback */
+@media (hover: none) and (pointer: coarse) {
+  button:active {
+    transform: scale(0.92) !important;
+    transition: transform 0.1s !important;
+  }
+}

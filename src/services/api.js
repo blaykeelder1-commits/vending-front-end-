@@ -240,13 +240,18 @@ export const vendorAPI = {
 // Customer API (Anonymous)
 export const customerAPI = {
   // Machine session
-  setMachine: (data) => api.post('/customer/set-machine', data),
+  setMachine: (data) => {
+    const screenResolution = `${window.screen.width}x${window.screen.height}`;
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return api.post('/customer/set-machine', { ...data, screenResolution, timezone });
+  },
   getMachine: () => api.get('/customer/machine'),
 
   // Swipe Polls
   getPolls: () => api.get('/customer/polls'),
   votePoll: (pollId, data) => api.post(`/customer/polls/${pollId}/vote`, data),
   getPollResults: (pollId) => api.get(`/customer/polls/${pollId}/results`),
+  checkPollCompletion: () => api.get('/customer/polls/check-completion'),
 
   // Product Suggestions
   submitSuggestion: (suggestion) => api.post('/customer/suggestions', { suggestion }),

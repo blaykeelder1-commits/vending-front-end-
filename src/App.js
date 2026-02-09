@@ -1671,6 +1671,8 @@ function MachineDetails() {
   };
 
   const handleSetPerformance = async (inventoryId, isPerforming) => {
+    // Save previous value for revert (could be true, false, or null)
+    const previousValue = inventory.find(item => item.id === inventoryId)?.is_performing;
     // Optimistic local update
     setInventory(prev => prev.map(item =>
       item.id === inventoryId ? { ...item, is_performing: isPerforming } : item
@@ -1678,9 +1680,9 @@ function MachineDetails() {
     try {
       await vendorAPI.setPerformance(id, inventoryId, { isPerforming });
     } catch (err) {
-      // Revert on failure
+      // Revert on failure to the actual previous value
       setInventory(prev => prev.map(item =>
-        item.id === inventoryId ? { ...item, is_performing: !isPerforming } : item
+        item.id === inventoryId ? { ...item, is_performing: previousValue } : item
       ));
       toast.error(err.response?.data?.message || 'Failed to update performance');
     }
@@ -3631,18 +3633,20 @@ function CustomerMachine() {
   const { qr_token } = useParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [machineId, setMachineId] = useState(null);
 
   useEffect(() => {
     const initMachine = async () => {
       try {
         const resolveResponse = await publicAPI.resolveMachineQR(qr_token);
-        const machineId = resolveResponse.data.data.machineId;
+        const id = resolveResponse.data.data.machineId;
 
-        const sessionResponse = await customerAPI.setMachine({ machineId });
+        const sessionResponse = await customerAPI.setMachine({ machineId: id });
         const sessionToken = sessionResponse.data.data.sessionToken;
 
         localStorage.setItem('token', sessionToken);
-        localStorage.setItem('selectedMachineId', machineId.toString());
+        localStorage.setItem('selectedMachineId', id.toString());
+        setMachineId(id);
 
         setLoading(false);
       } catch (err) {
@@ -3658,8 +3662,8 @@ function CustomerMachine() {
     return (
       <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
         <div>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔄</div>
-          <p>Connecting to machine...</p>
+          <div className="spinner" style={{ width: '48px', height: '48px', border: `3px solid ${theme.border}`, borderTopColor: theme.primary, borderRadius: '50%', margin: '0 auto 16px' }} />
+          <p style={{ color: theme.textSecondary }}>Connecting to machine...</p>
         </div>
       </div>
     );
@@ -3679,21 +3683,29 @@ function CustomerMachine() {
     );
   }
 
-  return <CustomerSwipe />;
+  return <CustomerSwipe machineId={machineId} />;
 }
 
-function CustomerSwipe() {
+function CustomerSwipe({ machineId }) {
   const [poll, setPoll] = useState(null);
   const [products, setProducts] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [completed, setCompleted] = useState(false);
+  const [alreadyVoted, setAlreadyVoted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [swiping, setSwiping] = useState(null);
   const [suggestion, setSuggestion] = useState('');
   const [suggestionSubmitted, setSuggestionSubmitted] = useState(false);
   const [submittingSuggestion, setSubmittingSuggestion] = useState(false);
+  const [cardEntering, setCardEntering] = useState(true);
   const cardRef = useRef(null);
   const toast = useToast();
+
+  // Touch/swipe state
+  const touchStartRef = useRef({ x: 0, y: 0 });
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const SWIPE_THRESHOLD = 80;
 
   const handleSubmitSuggestion = async () => {
     if (!suggestion.trim()) return;
@@ -3710,8 +3722,38 @@ function CustomerSwipe() {
   };
 
   useEffect(() => {
-    loadPolls();
-  }, []);
+    const init = async () => {
+      // Quick client-side check first
+      const localKey = `iddi_poll_completed_machine_${machineId}`;
+      const localCompleted = localStorage.getItem(localKey);
+      if (localCompleted) {
+        const completedAt = parseInt(localCompleted, 10);
+        if (Date.now() - completedAt < 24 * 60 * 60 * 1000) {
+          setAlreadyVoted(true);
+          setLoading(false);
+          return;
+        }
+        localStorage.removeItem(localKey);
+      }
+
+      // Server-side check via device fingerprint
+      try {
+        const checkRes = await customerAPI.checkPollCompletion();
+        if (checkRes.data?.data?.completed) {
+          setAlreadyVoted(true);
+          setLoading(false);
+          return;
+        }
+      } catch (err) {
+        // Non-critical: continue to load polls even if check fails
+      }
+
+      loadPolls();
+    };
+
+    init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [machineId]);
 
   const loadPolls = async () => {
     try {
@@ -3732,35 +3774,106 @@ function CustomerSwipe() {
     }
   };
 
-  const handleVote = async (voteType) => {
-    if (!poll || !products[currentIndex]) return;
+  const advanceCard = useCallback(() => {
+    setSwiping(null);
+    setDragOffset(0);
+    if (currentIndex < products.length - 1) {
+      setCardEntering(true);
+      setCurrentIndex(prev => prev + 1);
+      setTimeout(() => setCardEntering(false), 400);
+    } else {
+      // Mark completion
+      const localKey = `iddi_poll_completed_machine_${machineId}`;
+      localStorage.setItem(localKey, Date.now().toString());
+      setCompleted(true);
+    }
+  }, [currentIndex, products.length, machineId]);
+
+  const handleVote = useCallback(async (voteType) => {
+    if (!poll || !products[currentIndex] || swiping) return;
 
     setSwiping(voteType);
 
     try {
       await customerAPI.votePoll(poll.id, {
         optionId: products[currentIndex].id,
-        voteType: voteType
+        voteType
       });
 
-      setTimeout(() => {
-        setSwiping(null);
-        if (currentIndex < products.length - 1) {
-          setCurrentIndex(currentIndex + 1);
-        } else {
-          setCompleted(true);
-        }
-      }, 300);
+      setTimeout(advanceCard, 350);
     } catch (err) {
       setSwiping(null);
+      setDragOffset(0);
       toast.error(err.response?.data?.message || 'Failed to vote');
     }
-  };
+  }, [poll, products, currentIndex, swiping, advanceCard, toast]);
+
+  // Touch handlers for swipe gesture
+  const handleTouchStart = useCallback((e) => {
+    if (swiping) return;
+    const touch = e.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    setIsDragging(true);
+  }, [swiping]);
+
+  const handleTouchMove = useCallback((e) => {
+    if (!isDragging || swiping) return;
+    const touch = e.touches[0];
+    const dx = touch.clientX - touchStartRef.current.x;
+    setDragOffset(dx);
+  }, [isDragging, swiping]);
+
+  const handleTouchEnd = useCallback(() => {
+    if (!isDragging || swiping) return;
+    setIsDragging(false);
+
+    if (Math.abs(dragOffset) > SWIPE_THRESHOLD) {
+      handleVote(dragOffset > 0 ? 'like' : 'dislike');
+    } else {
+      setDragOffset(0);
+    }
+  }, [isDragging, swiping, dragOffset, handleVote]);
+
+  // Reset card entering state on first render
+  useEffect(() => {
+    if (!loading && products.length > 0) {
+      const timer = setTimeout(() => setCardEntering(false), 400);
+      return () => clearTimeout(timer);
+    }
+  }, [loading, products.length]);
 
   if (loading) {
     return (
       <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p>Loading...</p>
+        <div style={{ textAlign: 'center' }}>
+          <div className="spinner" style={{ width: '48px', height: '48px', border: `3px solid ${theme.border}`, borderTopColor: theme.primary, borderRadius: '50%', margin: '0 auto 16px' }} />
+          <p style={{ color: theme.textSecondary }}>Loading poll...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Already voted screen
+  if (alreadyVoted) {
+    return (
+      <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+        <div style={{ ...styles.card, maxWidth: '400px', width: '100%', padding: '32px 24px' }}>
+          <div style={{
+            width: '80px', height: '80px', borderRadius: '50%',
+            backgroundColor: theme.primary + '20', display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 20px', fontSize: '40px'
+          }}>
+            ✓
+          </div>
+          <h2 style={{ margin: '0 0 12px 0', fontSize: '24px' }}>You've Already Voted!</h2>
+          <p style={{ color: theme.textSecondary, margin: '0 0 8px 0', lineHeight: '1.6' }}>
+            Your feedback has been recorded. Thanks for helping us improve!
+          </p>
+          <p style={{ color: theme.textMuted, margin: 0, fontSize: '14px' }}>
+            Polls refresh every 24 hours. Check back soon!
+          </p>
+        </div>
       </div>
     );
   }
@@ -3768,7 +3881,7 @@ function CustomerSwipe() {
   if (completed) {
     return (
       <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-        <div style={{ ...styles.card, maxWidth: '400px', width: '100%' }}>
+        <div style={{ ...styles.card, maxWidth: '400px', width: '100%', padding: '32px 24px' }}>
           <div style={{ fontSize: '64px', marginBottom: '16px' }}>🎉</div>
           <h2 style={{ margin: '0 0 8px 0' }}>Thank You!</h2>
           <p style={{ color: theme.textSecondary, margin: '0 0 24px 0' }}>
@@ -3781,32 +3894,39 @@ function CustomerSwipe() {
             paddingTop: '24px',
             marginTop: '8px'
           }}>
-            <p style={{ margin: '0 0 12px 0', fontWeight: '500' }}>
-              Don't see a product you want?
+            <p style={{ margin: '0 0 4px 0', fontWeight: '600', fontSize: '16px' }}>
+              Want something we don't carry?
+            </p>
+            <p style={{ margin: '0 0 16px 0', color: theme.textMuted, fontSize: '14px' }}>
+              Tell us and we'll consider adding it!
             </p>
             {suggestionSubmitted ? (
               <div style={{
                 backgroundColor: theme.success + '20',
                 border: `1px solid ${theme.success}`,
-                borderRadius: '8px',
-                padding: '12px',
-                color: theme.success
+                borderRadius: '12px',
+                padding: '16px',
+                color: theme.success,
+                fontWeight: '500'
               }}>
                 ✓ Thanks! Your suggestion was sent to the vendor.
               </div>
             ) : (
               <div>
-                <input
-                  type="text"
-                  placeholder="Suggest a product (e.g., Takis, Gatorade)"
+                <textarea
+                  placeholder="e.g., Takis, Celsius Energy, Kind Bars..."
                   value={suggestion}
                   onChange={(e) => setSuggestion(e.target.value)}
-                  maxLength={100}
+                  maxLength={255}
+                  rows={2}
                   style={{
                     ...styles.input,
                     width: '100%',
                     marginBottom: '12px',
-                    textAlign: 'center'
+                    textAlign: 'center',
+                    resize: 'none',
+                    minHeight: '64px',
+                    fontSize: '16px',
                   }}
                 />
                 <button
@@ -3815,7 +3935,9 @@ function CustomerSwipe() {
                   style={{
                     ...styles.button,
                     width: '100%',
-                    opacity: !suggestion.trim() || submittingSuggestion ? 0.5 : 1
+                    opacity: !suggestion.trim() || submittingSuggestion ? 0.5 : 1,
+                    fontSize: '16px',
+                    padding: '14px',
                   }}
                 >
                   {submittingSuggestion ? 'Sending...' : 'Submit Suggestion'}
@@ -3830,69 +3952,171 @@ function CustomerSwipe() {
 
   const currentProduct = products[currentIndex];
   const progress = `${currentIndex + 1} / ${products.length}`;
+  const dragRotation = dragOffset * 0.08;
+  const dragOpacity = Math.max(0.4, 1 - Math.abs(dragOffset) / 300);
+
+  // Compute card transform
+  let cardTransform;
+  let cardTransition;
+  let cardBorderColor = theme.border;
+  if (swiping === 'like') {
+    cardTransform = 'translateX(120%) rotate(15deg)';
+    cardTransition = 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s, border-color 0.2s';
+    cardBorderColor = theme.success;
+  } else if (swiping === 'dislike') {
+    cardTransform = 'translateX(-120%) rotate(-15deg)';
+    cardTransition = 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s, border-color 0.2s';
+    cardBorderColor = theme.danger;
+  } else if (isDragging) {
+    cardTransform = `translateX(${dragOffset}px) rotate(${dragRotation}deg)`;
+    cardTransition = 'none';
+    if (dragOffset > 30) cardBorderColor = theme.success;
+    else if (dragOffset < -30) cardBorderColor = theme.danger;
+  } else if (cardEntering) {
+    cardTransform = 'scale(0.95)';
+    cardTransition = 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.4s';
+  } else {
+    cardTransform = 'translateX(0) rotate(0deg)';
+    cardTransition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s';
+  }
+
+  // Swipe indicator overlays
+  const showLikeIndicator = dragOffset > 30 || swiping === 'like';
+  const showDislikeIndicator = dragOffset < -30 || swiping === 'dislike';
+  const indicatorOpacity = swiping ? 1 : Math.min(1, Math.abs(dragOffset) / SWIPE_THRESHOLD);
 
   return (
-    <div style={{ ...styles.page, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+    <div style={{
+      ...styles.page,
+      display: 'flex',
+      flexDirection: 'column',
+      minHeight: '100vh',
+      overflow: 'hidden',
+      userSelect: 'none',
+      WebkitUserSelect: 'none',
+    }}>
       {/* Header */}
-      <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-        {/* Poll Type Indicator */}
+      <div style={{ textAlign: 'center', marginBottom: '16px' }}>
         {poll?.pollType && (
-          <div style={{ marginBottom: '12px' }}>
+          <div style={{ marginBottom: '10px' }}>
             <span style={{
               padding: '6px 14px',
               borderRadius: '16px',
               fontSize: '12px',
-              fontWeight: '500',
+              fontWeight: '600',
+              letterSpacing: '0.5px',
+              textTransform: 'uppercase',
               backgroundColor: poll.pollType === 'discovery' ? theme.secondary + '20' : theme.primary + '20',
               color: poll.pollType === 'discovery' ? theme.secondary : theme.primary
             }}>
-              {poll.pollType === 'discovery' ? 'New Product Discovery' : 'Help Us Improve'}
+              {poll.pollType === 'discovery' ? 'New Products' : 'Help Us Improve'}
             </span>
           </div>
         )}
-        <h2 style={{ margin: '0 0 8px 0' }}>{poll?.question || 'Which products do you want?'}</h2>
-        <p style={{ color: theme.textSecondary, margin: 0 }}>{progress}</p>
+        <h2 style={{ margin: '0 0 8px 0', fontSize: '20px' }}>{poll?.question || 'Which products do you want?'}</h2>
+        <p style={{ color: theme.textSecondary, margin: 0, fontSize: '14px' }}>{progress}</p>
 
         {/* Progress bar */}
-        <div style={{ height: '4px', backgroundColor: theme.surfaceHover, borderRadius: '2px', marginTop: '16px' }}>
+        <div style={{ height: '4px', backgroundColor: theme.surfaceHover, borderRadius: '2px', marginTop: '12px' }}>
           <div style={{
             height: '100%',
             width: `${((currentIndex + 1) / products.length) * 100}%`,
             backgroundColor: theme.primary,
             borderRadius: '2px',
-            transition: 'width 0.3s'
+            transition: 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
           }} />
         </div>
       </div>
 
-      {/* Card */}
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {/* Swipe instruction - only show on first card */}
+      {currentIndex === 0 && !swiping && !isDragging && (
+        <div style={{ textAlign: 'center', color: theme.textMuted, fontSize: '13px', marginBottom: '8px' }}>
+          Swipe right to keep, left to pass
+        </div>
+      )}
+
+      {/* Card Area */}
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative',
+        touchAction: 'pan-y',
+      }}>
         <div
           ref={cardRef}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
           style={{
             ...styles.card,
             width: '100%',
             maxWidth: '350px',
             textAlign: 'center',
-            transform: swiping === 'like' ? 'translateX(50px) rotate(5deg)' :
-                       swiping === 'dislike' ? 'translateX(-50px) rotate(-5deg)' : 'none',
-            transition: 'transform 0.3s',
-            opacity: swiping ? 0.8 : 1,
-            borderColor: swiping === 'like' ? theme.success :
-                         swiping === 'dislike' ? theme.danger : theme.border,
+            position: 'relative',
+            transform: cardTransform,
+            transition: cardTransition,
+            opacity: swiping ? 0.6 : dragOpacity,
+            borderColor: cardBorderColor,
+            borderWidth: '2px',
+            boxShadow: isDragging
+              ? `0 12px 40px rgba(0,0,0,0.4), 0 0 0 1px ${cardBorderColor}40`
+              : '0 4px 20px rgba(0,0,0,0.2)',
+            cursor: 'grab',
           }}
         >
+          {/* Swipe indicator overlays */}
+          {showLikeIndicator && (
+            <div style={{
+              position: 'absolute', top: '16px', left: '16px', zIndex: 10,
+              padding: '6px 16px', borderRadius: '8px',
+              border: `3px solid ${theme.success}`, color: theme.success,
+              fontSize: '24px', fontWeight: '800', letterSpacing: '2px',
+              transform: 'rotate(-15deg)', opacity: indicatorOpacity,
+              textTransform: 'uppercase',
+            }}>
+              WANT
+            </div>
+          )}
+          {showDislikeIndicator && (
+            <div style={{
+              position: 'absolute', top: '16px', right: '16px', zIndex: 10,
+              padding: '6px 16px', borderRadius: '8px',
+              border: `3px solid ${theme.danger}`, color: theme.danger,
+              fontSize: '24px', fontWeight: '800', letterSpacing: '2px',
+              transform: 'rotate(15deg)', opacity: indicatorOpacity,
+              textTransform: 'uppercase',
+            }}>
+              PASS
+            </div>
+          )}
+
+          {/* Color gradient overlay during drag */}
+          {isDragging && Math.abs(dragOffset) > 20 && (
+            <div style={{
+              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+              borderRadius: '10px', pointerEvents: 'none', zIndex: 5,
+              background: dragOffset > 0
+                ? `linear-gradient(90deg, transparent 40%, ${theme.success}15 100%)`
+                : `linear-gradient(270deg, transparent 40%, ${theme.danger}15 100%)`,
+              transition: 'opacity 0.1s',
+            }} />
+          )}
+
           {currentProduct?.image_url ? (
             <>
               <img
                 src={currentProduct.image_url}
                 alt={currentProduct.product_name}
+                draggable={false}
                 style={{
                   width: '100%',
                   height: '250px',
                   objectFit: 'cover',
                   borderRadius: '8px',
-                  marginBottom: '16px'
+                  marginBottom: '16px',
+                  pointerEvents: 'none',
                 }}
                 onError={(e) => {
                   e.target.style.display = 'none';
@@ -3936,25 +4160,32 @@ function CustomerSwipe() {
               </span>
             </div>
           )}
-          <h3 style={{ margin: 0, fontSize: '24px' }}>{currentProduct?.product_name}</h3>
+          <h3 style={{ margin: 0, fontSize: '22px', position: 'relative', zIndex: 6 }}>{currentProduct?.product_name}</h3>
         </div>
       </div>
 
       {/* Action Buttons */}
-      <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', padding: '24px 0' }} role="group" aria-label="Vote on product">
+      <div style={{ display: 'flex', gap: '24px', justifyContent: 'center', padding: '20px 0 12px' }} role="group" aria-label="Vote on product">
         <button
           onClick={() => handleVote('dislike')}
-          disabled={swiping}
+          disabled={!!swiping}
           style={{
-            width: '80px',
-            height: '80px',
+            width: '72px',
+            height: '72px',
             borderRadius: '50%',
             border: `3px solid ${theme.danger}`,
             backgroundColor: 'transparent',
             color: theme.danger,
-            fontSize: '32px',
+            fontSize: '28px',
             cursor: 'pointer',
-            transition: 'all 0.2s',
+            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            boxShadow: `0 0 20px ${theme.danger}20`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 0,
+            minHeight: 'unset',
+            minWidth: 'unset',
           }}
           aria-label="Pass on this product"
           title="Pass"
@@ -3963,17 +4194,24 @@ function CustomerSwipe() {
         </button>
         <button
           onClick={() => handleVote('like')}
-          disabled={swiping}
+          disabled={!!swiping}
           style={{
-            width: '80px',
-            height: '80px',
+            width: '72px',
+            height: '72px',
             borderRadius: '50%',
             border: `3px solid ${theme.success}`,
             backgroundColor: 'transparent',
             color: theme.success,
-            fontSize: '32px',
+            fontSize: '28px',
             cursor: 'pointer',
-            transition: 'all 0.2s',
+            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            boxShadow: `0 0 20px ${theme.success}20`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 0,
+            minHeight: 'unset',
+            minWidth: 'unset',
           }}
           aria-label="Want this product"
           title="Want it"
@@ -3982,8 +4220,8 @@ function CustomerSwipe() {
         </button>
       </div>
 
-      <div style={{ textAlign: 'center', color: theme.textMuted, fontSize: '14px', paddingBottom: '20px' }}>
-        ✗ Pass • ✓ Want it
+      <div style={{ textAlign: 'center', color: theme.textMuted, fontSize: '13px', paddingBottom: '16px' }}>
+        ✗ Pass &nbsp;&nbsp;•&nbsp;&nbsp; ✓ Want it
       </div>
     </div>
   );
