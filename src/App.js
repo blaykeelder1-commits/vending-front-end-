@@ -308,13 +308,21 @@ function VendorLogin() {
   const [googleError, setGoogleError] = useState('');
   const [needsVerification, setNeedsVerification] = useState(false);
   const [useRedirectFlow, setUseRedirectFlow] = useState(false);
+  const [isInAppBrowser, setIsInAppBrowser] = useState(false);
   const navigate = useNavigate();
   const googleButtonRef = useRef(null);
 
-  // Detect mobile browsers and Safari that need redirect-based OAuth
-  // Mobile browsers block Google's popup sign-in flow
+  // Detect in-app browsers (WebViews) that Google blocks for OAuth
+  // and mobile browsers that need redirect-based OAuth
   useEffect(() => {
     const ua = navigator.userAgent;
+    // Detect in-app browsers / WebViews where Google blocks OAuth
+    const inApp = /FBAN|FBAV|Instagram|Twitter|Line|KAKAOTALK|naver|snapchat|CriOS.*GSA|GSA\/|LinkedIn/i.test(ua) ||
+      (/iPhone|iPad|iPod/.test(ua) && !/Safari/i.test(ua)) ||
+      (/Android/.test(ua) && /wv|WebView/i.test(ua)) ||
+      /\.app$/i.test(ua);
+    setIsInAppBrowser(inApp);
+
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua) ||
       (navigator.maxTouchPoints > 0 && window.innerWidth < 1024);
     const isSafariBrowser = /^((?!chrome|android).)*safari/i.test(ua) ||
@@ -553,10 +561,52 @@ function VendorLogin() {
           <div style={{ flex: 1, height: '1px', backgroundColor: theme.border }}></div>
         </div>
 
+        {/* In-app browser warning */}
+        {isInAppBrowser && (
+          <div style={{
+            padding: '12px 16px',
+            backgroundColor: theme.warning + '20',
+            border: `1px solid ${theme.warning}`,
+            borderRadius: '8px',
+            marginBottom: '12px',
+            textAlign: 'center',
+          }}>
+            <p style={{ color: theme.warning, fontSize: '13px', fontWeight: '600', margin: '0 0 8px 0' }}>
+              Google Sign-In requires a full browser
+            </p>
+            <p style={{ color: theme.textSecondary, fontSize: '12px', margin: '0 0 10px 0' }}>
+              Tap the button below to copy the link, then paste it in Safari or Chrome.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(window.location.origin + '/vendor/login').then(() => {
+                  setError('');
+                  setGoogleError('Link copied! Open Safari or Chrome and paste it.');
+                }).catch(() => {
+                  setGoogleError(`Open this URL in your browser: ${window.location.origin}`);
+                });
+              }}
+              style={{
+                padding: '8px 20px',
+                backgroundColor: theme.warning,
+                color: '#000',
+                border: 'none',
+                borderRadius: '6px',
+                fontWeight: '600',
+                fontSize: '13px',
+                cursor: 'pointer',
+              }}
+            >
+              Copy Link
+            </button>
+          </div>
+        )}
+
         {/* Google Sign-In Button */}
         {process.env.REACT_APP_GOOGLE_CLIENT_ID && process.env.REACT_APP_GOOGLE_CLIENT_ID !== 'your_google_client_id_here' ? (
           <div style={{ position: 'relative' }}>
-            {/* Safari/iOS uses redirect flow due to third-party cookie restrictions */}
+            {/* Mobile uses redirect flow, desktop uses GIS popup */}
             {useRedirectFlow ? (
               <button
                 type="button"
