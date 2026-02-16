@@ -33,6 +33,28 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
+// Cross-tab token refresh sync via BroadcastChannel
+const tokenChannel = typeof BroadcastChannel !== 'undefined'
+  ? new BroadcastChannel('token-refresh')
+  : null;
+
+if (tokenChannel) {
+  tokenChannel.onmessage = (event) => {
+    const { type, accessToken, refreshToken } = event.data;
+    if (type === 'TOKEN_REFRESHED' && accessToken) {
+      localStorage.setItem('token', accessToken);
+      if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+      api.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
+      // Resolve any queued requests in this tab
+      processQueue(null, accessToken);
+      isRefreshing = false;
+    } else if (type === 'TOKEN_REFRESH_FAILED') {
+      processQueue(new Error('Token refresh failed in another tab'), null);
+      isRefreshing = false;
+    }
+  };
+}
+
 // Response interceptor for error handling and automatic token refresh
 api.interceptors.response.use(
   (response) => response,
@@ -73,10 +95,17 @@ api.interceptors.response.use(
           localStorage.setItem('refreshToken', newRefreshToken);
           api.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
           processQueue(null, accessToken);
+          // Notify other tabs about the new token
+          if (tokenChannel) {
+            tokenChannel.postMessage({ type: 'TOKEN_REFRESHED', accessToken, refreshToken: newRefreshToken });
+          }
           originalRequest.headers.Authorization = `Bearer ${accessToken}`;
           return api(originalRequest);
         } catch (refreshError) {
           processQueue(refreshError, null);
+          if (tokenChannel) {
+            tokenChannel.postMessage({ type: 'TOKEN_REFRESH_FAILED' });
+          }
           localStorage.removeItem('token');
           localStorage.removeItem('refreshToken');
           localStorage.removeItem('userType');

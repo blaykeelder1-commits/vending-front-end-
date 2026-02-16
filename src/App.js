@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useContext, createContext, useCallb
 import { BrowserRouter as Router, Routes, Route, Link, Navigate, useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
 import { authAPI, vendorAPI, customerAPI, publicAPI } from './services/api';
 import QRCode from 'qrcode';
-import { jsPDF } from 'jspdf';
+
 import ErrorBoundary from './components/ErrorBoundary';
 import './App.css';
 
@@ -48,7 +48,7 @@ function ToastProvider({ children }) {
   );
 }
 
-function ToastContainer({ toasts }) {
+const ToastContainer = React.memo(function ToastContainer({ toasts }) {
   return (
     <div style={{
       position: 'fixed',
@@ -64,9 +64,9 @@ function ToastContainer({ toasts }) {
       ))}
     </div>
   );
-}
+});
 
-function Toast({ message, type }) {
+const Toast = React.memo(function Toast({ message, type }) {
   const colors = {
     success: { bg: '#22c55e20', border: '#22c55e', text: '#22c55e' },
     error: { bg: '#ef444420', border: '#ef4444', text: '#ef4444' },
@@ -91,7 +91,7 @@ function Toast({ message, type }) {
       {message}
     </div>
   );
-}
+});
 
 // ============================================
 // THEME / STYLES
@@ -126,6 +126,37 @@ const styles = {
     border: `1px solid ${theme.border}`,
     borderRadius: '12px',
     padding: '16px',
+  },
+  flexCenter: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  flexBetween: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  flexColumn: {
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  textCenter: {
+    textAlign: 'center',
+  },
+  textSecondary: {
+    color: theme.textSecondary,
+    fontSize: '14px',
+  },
+  textMuted: {
+    color: theme.textMuted,
+    fontSize: '13px',
+  },
+  badge: {
+    padding: '4px 8px',
+    borderRadius: '6px',
+    fontSize: '12px',
+    fontWeight: '600',
   },
   button: {
     padding: '10px 16px',
@@ -232,7 +263,7 @@ function MobileNav({ isOpen, onClose, onLogout }) {
   );
 }
 
-function MobileMenuButton({ isOpen, onClick }) {
+const MobileMenuButton = React.memo(function MobileMenuButton({ isOpen, onClick }) {
   return (
     <button
       className={`mobile-menu-btn ${isOpen ? 'open' : ''}`}
@@ -245,7 +276,7 @@ function MobileMenuButton({ isOpen, onClick }) {
       <span></span>
     </button>
   );
-}
+});
 
 // Custom hook for responsive detection
 function useIsMobile(breakpoint = 768) {
@@ -1833,8 +1864,9 @@ function MachineDetails() {
     toast.success('Link copied to clipboard');
   };
 
-  const handleDownloadQRPDF = () => {
+  const handleDownloadQRPDF = async () => {
     if (!machine?.qr_token || !qrCodeDataUrl) return;
+    const { jsPDF } = await import('jspdf');
     const pdf = new jsPDF();
     const pageWidth = pdf.internal.pageSize.getWidth();
     pdf.setFontSize(18);
