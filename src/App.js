@@ -2212,7 +2212,7 @@ function MachineDetails() {
                       border: `1px solid ${sourceType === 'warehouse' ? theme.primary : theme.border}`,
                     }}
                   >
-                    From Warehouse
+                    From Stock
                   </button>
                   <button
                     type="button"
@@ -2231,7 +2231,7 @@ function MachineDetails() {
                 </div>
                 {sourceType === 'warehouse' && selectedProductId && warehouseStock[parseInt(selectedProductId)] !== undefined && (
                   <div style={{ color: theme.textMuted, fontSize: '12px', marginTop: '6px' }}>
-                    Warehouse: {warehouseStock[parseInt(selectedProductId)]} available
+                    On Hand: {warehouseStock[parseInt(selectedProductId)]} available
                   </div>
                 )}
               </div>
@@ -4678,7 +4678,7 @@ function InventoryManagement() {
         <div>
           <h1 style={{ margin: '0 0 8px 0' }}>📦 Central Inventory</h1>
           <p style={{ color: theme.textSecondary, margin: 0 }}>
-            Track warehouse stock levels and purchases
+            Track stock levels and purchases
           </p>
         </div>
         <button onClick={loadInventory} style={{ ...styles.button, ...styles.buttonSecondary }}>
@@ -4690,7 +4690,7 @@ function InventoryManagement() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '12px', marginBottom: '24px' }}>
         <div style={{ ...styles.card, textAlign: 'center' }}>
           <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{summary.totalOnHand || 0}</div>
-          <div style={{ color: theme.textSecondary, fontSize: '13px' }}>Warehouse</div>
+          <div style={{ color: theme.textSecondary, fontSize: '13px' }}>On Hand</div>
         </div>
         <div style={{ ...styles.card, textAlign: 'center', borderColor: theme.primary }}>
           <div style={{ fontSize: '24px', fontWeight: 'bold', color: theme.primary }}>{summary.totalInField || 0}</div>
@@ -4772,7 +4772,7 @@ function InventoryManagement() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{item.quantity_on_hand}</div>
-                      <div style={{ color: theme.textMuted, fontSize: '11px' }}>Warehouse</div>
+                      <div style={{ color: theme.textMuted, fontSize: '11px' }}>On Hand</div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontSize: '18px', fontWeight: 'bold', color: theme.primary }}>{item.in_field || 0}</div>
