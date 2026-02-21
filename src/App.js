@@ -4651,6 +4651,7 @@ function InventoryManagement() {
       purchase: { bg: '#22c55e20', color: theme.success, label: 'Purchase' },
       dispersal_to_machine: { bg: '#8b5cf620', color: theme.primary, label: 'To Machine' },
       direct_to_machine: { bg: '#06b6d420', color: theme.secondary, label: 'Direct' },
+      sold_from_machine: { bg: '#ef444420', color: theme.danger, label: 'Sold' },
       adjustment: { bg: '#f59e0b20', color: theme.warning, label: 'Adjustment' },
     };
     const c = colors[type] || { bg: '#71717a20', color: theme.textMuted, label: type };
@@ -4686,10 +4687,18 @@ function InventoryManagement() {
       </div>
 
       {/* Summary Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px', marginBottom: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '12px', marginBottom: '24px' }}>
         <div style={{ ...styles.card, textAlign: 'center' }}>
-          <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{summary.totalProducts || 0}</div>
-          <div style={{ color: theme.textSecondary, fontSize: '13px' }}>Products</div>
+          <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{summary.totalOnHand || 0}</div>
+          <div style={{ color: theme.textSecondary, fontSize: '13px' }}>Warehouse</div>
+        </div>
+        <div style={{ ...styles.card, textAlign: 'center', borderColor: theme.primary }}>
+          <div style={{ fontSize: '24px', fontWeight: 'bold', color: theme.primary }}>{summary.totalInField || 0}</div>
+          <div style={{ color: theme.textSecondary, fontSize: '13px' }}>In Machines</div>
+        </div>
+        <div style={{ ...styles.card, textAlign: 'center' }}>
+          <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{summary.totalAll || 0}</div>
+          <div style={{ color: theme.textSecondary, fontSize: '13px' }}>Total</div>
         </div>
         <div style={{ ...styles.card, textAlign: 'center', borderColor: theme.success }}>
           <div style={{ fontSize: '24px', fontWeight: 'bold', color: theme.success }}>{summary.healthy || 0}</div>
@@ -4763,7 +4772,15 @@ function InventoryManagement() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
                     <div style={{ textAlign: 'center' }}>
                       <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{item.quantity_on_hand}</div>
-                      <div style={{ color: theme.textMuted, fontSize: '11px' }}>On Hand</div>
+                      <div style={{ color: theme.textMuted, fontSize: '11px' }}>Warehouse</div>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '18px', fontWeight: 'bold', color: theme.primary }}>{item.in_field || 0}</div>
+                      <div style={{ color: theme.textMuted, fontSize: '11px' }}>In Machines</div>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{item.total_stock || 0}</div>
+                      <div style={{ color: theme.textMuted, fontSize: '11px' }}>Total</div>
                     </div>
                     {getStatusBadge(item.stock_status)}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -4914,6 +4931,7 @@ function InventoryManagement() {
               <option value="purchase">Purchase</option>
               <option value="dispersal_to_machine">Dispersal to Machine</option>
               <option value="direct_to_machine">Direct to Machine</option>
+              <option value="sold_from_machine">Sold</option>
               <option value="adjustment">Adjustment</option>
             </select>
           </div>
