@@ -261,6 +261,18 @@ export const vendorAPI = {
   getMachineHistory: (machineId, limit = 50, offset = 0) =>
     api.get(`/vendor/machines/${machineId}/history?limit=${limit}&offset=${offset}`),
 
+  // Central Inventory
+  getInventory: () => api.get('/vendor/inventory'),
+  logPurchase: (data) => api.post('/vendor/inventory/purchase', data),
+  adjustInventory: (data) => api.post('/vendor/inventory/adjust', data),
+  updateReorderThreshold: (productId, threshold) =>
+    api.put(`/vendor/inventory/${productId}/threshold`, { threshold }),
+  getInventoryTransactions: (params = {}) => {
+    const queryParams = new URLSearchParams(params).toString();
+    return api.get(`/vendor/inventory/transactions${queryParams ? '?' + queryParams : ''}`);
+  },
+  getInventoryAlerts: () => api.get('/vendor/inventory/alerts'),
+
   // Analytics
   getAnalyticsOverview: () => api.get('/analytics/overview'),
   getMachineAnalytics: (machineId) => api.get(`/analytics/machines/${machineId}`),

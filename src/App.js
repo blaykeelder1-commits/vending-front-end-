@@ -230,6 +230,7 @@ function MobileNav({ isOpen, onClose, onLogout }) {
     { to: '/vendor/analytics', label: 'Analytics', icon: '📈' },
     { to: '/vendor/route-plan', label: 'Route Plan', icon: '📋' },
     { to: '/vendor/suggestions', label: 'Suggestions', icon: '💡' },
+    { to: '/vendor/inventory', label: 'Inventory', icon: '📦' },
     { to: '/vendor/expiring', label: 'Expiring', icon: '⏰' },
     { to: '/vendor/poll-summary', label: 'Shopping List', icon: '🛒' },
     { to: '/vendor/top-products', label: 'Top 50', icon: '🏆' },
@@ -1174,6 +1175,7 @@ function VendorDashboard() {
   const [loading, setLoading] = useState(true);
   const [expiringCount, setExpiringCount] = useState(0);
   const [pendingSuggestions, setPendingSuggestions] = useState(0);
+  const [lowStockCount, setLowStockCount] = useState(0);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const toast = useToast();
@@ -1191,11 +1193,12 @@ function VendorDashboard() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [machinesRes, productsRes, expiringRes, suggestionsRes] = await Promise.allSettled([
+      const [machinesRes, productsRes, expiringRes, suggestionsRes, alertsRes] = await Promise.allSettled([
         vendorAPI.getMachines(),
         vendorAPI.getProducts(),
         vendorAPI.getExpiringProducts(14),
-        vendorAPI.getSuggestions({ status: 'pending' })
+        vendorAPI.getSuggestions({ status: 'pending' }),
+        vendorAPI.getInventoryAlerts()
       ]);
 
       if (machinesRes.status === 'fulfilled') {
@@ -1213,6 +1216,9 @@ function VendorDashboard() {
       if (suggestionsRes.status === 'fulfilled') {
         const suggestions = suggestionsRes.value?.data?.data?.suggestions || [];
         setPendingSuggestions(suggestions.length);
+      }
+      if (alertsRes.status === 'fulfilled') {
+        setLowStockCount(alertsRes.value?.data?.data?.count || 0);
       }
     } catch (err) {
       toast.error('Failed to load dashboard data');
@@ -1323,6 +1329,26 @@ function VendorDashboard() {
                   fontSize: '10px',
                   fontWeight: 'bold'
                 }}>{pendingSuggestions}</span>
+              )}
+            </Link>
+            <Link to="/vendor/inventory" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', position: 'relative', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              📦 Inventory
+              {lowStockCount > 0 && (
+                <span style={{
+                  position: 'absolute',
+                  top: '-6px',
+                  right: '-6px',
+                  backgroundColor: theme.warning,
+                  color: 'black',
+                  borderRadius: '50%',
+                  width: '18px',
+                  height: '18px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '10px',
+                  fontWeight: 'bold'
+                }}>{lowStockCount}</span>
               )}
             </Link>
             <Link to="/vendor/expiring" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', position: 'relative', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1646,6 +1672,8 @@ function MachineDetails() {
   const [showPollForm, setShowPollForm] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState('');
   const [stockQuantity, setStockQuantity] = useState('10');
+  const [sourceType, setSourceType] = useState('warehouse');
+  const [warehouseStock, setWarehouseStock] = useState({});
   const [loading, setLoading] = useState(true);
   // Redistribution state
   const [showRedistribution, setShowRedistribution] = useState(false);
@@ -1677,12 +1705,13 @@ function MachineDetails() {
       if (!isBackground && !initialLoadDone.current) {
         setLoading(true);
       }
-      const [machineRes, inventoryRes, productsRes, pollsRes, visitRes] = await Promise.allSettled([
+      const [machineRes, inventoryRes, productsRes, pollsRes, visitRes, centralInvRes] = await Promise.allSettled([
         vendorAPI.getMachine(id),
         vendorAPI.getMachineInventory(id),
         vendorAPI.getProducts(),
         vendorAPI.getMachinePolls(id),
-        vendorAPI.getChangesSinceVisit(id)
+        vendorAPI.getChangesSinceVisit(id),
+        vendorAPI.getInventory()
       ]);
 
       if (machineRes.status === 'fulfilled') {
@@ -1713,6 +1742,13 @@ function MachineDetails() {
       if (visitRes.status === 'fulfilled') {
         setVisitChanges(visitRes.value.data.data);
       }
+
+      if (centralInvRes.status === 'fulfilled') {
+        const inv = centralInvRes.value.data?.data?.inventory || [];
+        const stockMap = {};
+        inv.forEach(item => { stockMap[item.product_id] = item.quantity_on_hand; });
+        setWarehouseStock(stockMap);
+      }
     } catch (err) {
       toast.error('Failed to load machine data');
     } finally {
@@ -1730,7 +1766,8 @@ function MachineDetails() {
     try {
       const response = await vendorAPI.addToInventory(id, {
         productId: parseInt(selectedProductId),
-        stockQuantity: parseInt(stockQuantity)
+        stockQuantity: parseInt(stockQuantity),
+        sourceType,
       });
 
       // Get product details from local state
@@ -2159,6 +2196,44 @@ function MachineDetails() {
                     );
                   })}
                 </select>
+              </div>
+              <div style={{ marginBottom: '4px' }}>
+                <label style={styles.label}>Source</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setSourceType('warehouse')}
+                    style={{
+                      ...styles.button,
+                      flex: 1,
+                      fontSize: '13px',
+                      padding: '8px 12px',
+                      backgroundColor: sourceType === 'warehouse' ? theme.primary : 'transparent',
+                      border: `1px solid ${sourceType === 'warehouse' ? theme.primary : theme.border}`,
+                    }}
+                  >
+                    From Warehouse
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSourceType('direct')}
+                    style={{
+                      ...styles.button,
+                      flex: 1,
+                      fontSize: '13px',
+                      padding: '8px 12px',
+                      backgroundColor: sourceType === 'direct' ? theme.primary : 'transparent',
+                      border: `1px solid ${sourceType === 'direct' ? theme.primary : theme.border}`,
+                    }}
+                  >
+                    Direct Purchase
+                  </button>
+                </div>
+                {sourceType === 'warehouse' && selectedProductId && warehouseStock[parseInt(selectedProductId)] !== undefined && (
+                  <div style={{ color: theme.textMuted, fontSize: '12px', marginTop: '6px' }}>
+                    Warehouse: {warehouseStock[parseInt(selectedProductId)]} available
+                  </div>
+                )}
               </div>
               <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
                 <div style={{ flex: 1 }}>
@@ -4434,6 +4509,477 @@ function Suggestions() {
 // EXPIRING PRODUCTS
 // ============================================
 
+// ============================================
+// INVENTORY MANAGEMENT PAGE
+// ============================================
+function InventoryManagement() {
+  const [inventory, setInventory] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('stock');
+  const [summary, setSummary] = useState({});
+  // Purchase form
+  const [purchaseProductId, setPurchaseProductId] = useState('');
+  const [purchaseQuantity, setPurchaseQuantity] = useState('');
+  const [purchaseNotes, setPurchaseNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  // Transaction filters
+  const [txnFilter, setTxnFilter] = useState({ productId: '', type: '' });
+  const [txnTotal, setTxnTotal] = useState(0);
+  const [txnPage, setTxnPage] = useState(0);
+  // Adjust modal
+  const [adjustProduct, setAdjustProduct] = useState(null);
+  const [adjustQuantity, setAdjustQuantity] = useState('');
+  const [adjustNotes, setAdjustNotes] = useState('');
+  const toast = useToast();
+
+  const loadInventory = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [invRes, prodRes] = await Promise.allSettled([
+        vendorAPI.getInventory(),
+        vendorAPI.getProducts(),
+      ]);
+      if (invRes.status === 'fulfilled') {
+        setInventory(invRes.value.data?.data?.inventory || []);
+        setSummary(invRes.value.data?.data?.summary || {});
+      }
+      if (prodRes.status === 'fulfilled') {
+        setProducts(prodRes.value.data?.data?.products || []);
+      }
+    } catch (err) {
+      toast.error('Failed to load inventory');
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  const loadTransactions = useCallback(async () => {
+    try {
+      const params = { limit: 50, offset: txnPage * 50 };
+      if (txnFilter.productId) params.productId = txnFilter.productId;
+      if (txnFilter.type) params.type = txnFilter.type;
+      const res = await vendorAPI.getInventoryTransactions(params);
+      setTransactions(res.data?.data?.transactions || []);
+      setTxnTotal(res.data?.data?.total || 0);
+    } catch (err) {
+      toast.error('Failed to load transactions');
+    }
+  }, [txnFilter, txnPage, toast]);
+
+  useEffect(() => {
+    loadInventory();
+  }, [loadInventory]);
+
+  useEffect(() => {
+    if (activeTab === 'history') {
+      loadTransactions();
+    }
+  }, [activeTab, loadTransactions]);
+
+  const handlePurchase = async (e) => {
+    e.preventDefault();
+    if (!purchaseProductId || !purchaseQuantity) return;
+    setSubmitting(true);
+    try {
+      await vendorAPI.logPurchase({
+        productId: parseInt(purchaseProductId),
+        quantity: parseInt(purchaseQuantity),
+        notes: purchaseNotes || null,
+      });
+      toast.success('Purchase logged successfully');
+      setPurchaseProductId('');
+      setPurchaseQuantity('');
+      setPurchaseNotes('');
+      loadInventory();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to log purchase');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleThresholdUpdate = async (productId, newThreshold) => {
+    try {
+      await vendorAPI.updateReorderThreshold(productId, parseInt(newThreshold));
+      setInventory(prev => prev.map(item =>
+        item.product_id === productId ? { ...item, reorder_threshold: parseInt(newThreshold) } : item
+      ));
+      toast.success('Threshold updated');
+    } catch (err) {
+      toast.error('Failed to update threshold');
+    }
+  };
+
+  const handleAdjust = async (e) => {
+    e.preventDefault();
+    if (!adjustProduct || !adjustQuantity || !adjustNotes) return;
+    setSubmitting(true);
+    try {
+      await vendorAPI.adjustInventory({
+        productId: adjustProduct.product_id,
+        quantity: parseInt(adjustQuantity),
+        notes: adjustNotes,
+      });
+      toast.success('Inventory adjusted');
+      setAdjustProduct(null);
+      setAdjustQuantity('');
+      setAdjustNotes('');
+      loadInventory();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to adjust inventory');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const getStatusBadge = (status) => {
+    const colors = {
+      ok: { bg: '#22c55e20', color: theme.success, label: 'OK' },
+      low: { bg: '#f59e0b20', color: theme.warning, label: 'Low' },
+      out: { bg: '#ef444420', color: theme.danger, label: 'Out' },
+    };
+    const c = colors[status] || colors.ok;
+    return (
+      <span style={{ ...styles.badge, backgroundColor: c.bg, color: c.color }}>{c.label}</span>
+    );
+  };
+
+  const getTxnTypeBadge = (type) => {
+    const colors = {
+      purchase: { bg: '#22c55e20', color: theme.success, label: 'Purchase' },
+      dispersal_to_machine: { bg: '#8b5cf620', color: theme.primary, label: 'To Machine' },
+      direct_to_machine: { bg: '#06b6d420', color: theme.secondary, label: 'Direct' },
+      adjustment: { bg: '#f59e0b20', color: theme.warning, label: 'Adjustment' },
+    };
+    const c = colors[type] || { bg: '#71717a20', color: theme.textMuted, label: type };
+    return (
+      <span style={{ ...styles.badge, backgroundColor: c.bg, color: c.color }}>{c.label}</span>
+    );
+  };
+
+  if (loading) {
+    return (
+      <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p>Loading inventory...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={styles.page}>
+      <Link to="/vendor/dashboard" style={{ ...styles.link, display: 'inline-block', marginBottom: '24px' }}>
+        ← Back to Dashboard
+      </Link>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h1 style={{ margin: '0 0 8px 0' }}>📦 Central Inventory</h1>
+          <p style={{ color: theme.textSecondary, margin: 0 }}>
+            Track warehouse stock levels and purchases
+          </p>
+        </div>
+        <button onClick={loadInventory} style={{ ...styles.button, ...styles.buttonSecondary }}>
+          ↻ Refresh
+        </button>
+      </div>
+
+      {/* Summary Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px', marginBottom: '24px' }}>
+        <div style={{ ...styles.card, textAlign: 'center' }}>
+          <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{summary.totalProducts || 0}</div>
+          <div style={{ color: theme.textSecondary, fontSize: '13px' }}>Products</div>
+        </div>
+        <div style={{ ...styles.card, textAlign: 'center', borderColor: theme.success }}>
+          <div style={{ fontSize: '24px', fontWeight: 'bold', color: theme.success }}>{summary.healthy || 0}</div>
+          <div style={{ color: theme.textSecondary, fontSize: '13px' }}>Healthy</div>
+        </div>
+        <div style={{ ...styles.card, textAlign: 'center', borderColor: theme.warning }}>
+          <div style={{ fontSize: '24px', fontWeight: 'bold', color: theme.warning }}>{summary.lowStock || 0}</div>
+          <div style={{ color: theme.textSecondary, fontSize: '13px' }}>Low Stock</div>
+        </div>
+        <div style={{ ...styles.card, textAlign: 'center', borderColor: theme.danger }}>
+          <div style={{ fontSize: '24px', fontWeight: 'bold', color: theme.danger }}>{summary.outOfStock || 0}</div>
+          <div style={{ color: theme.textSecondary, fontSize: '13px' }}>Out of Stock</div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: `1px solid ${theme.border}`, paddingBottom: '8px' }}>
+        {[
+          { key: 'stock', label: 'Stock Levels' },
+          { key: 'purchase', label: 'Log Purchase' },
+          { key: 'history', label: 'Transaction History' },
+        ].map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            style={{
+              ...styles.button,
+              backgroundColor: activeTab === tab.key ? theme.primary : 'transparent',
+              border: activeTab === tab.key ? 'none' : `1px solid ${theme.border}`,
+              fontSize: '14px',
+              padding: '8px 16px',
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Stock Levels Tab */}
+      {activeTab === 'stock' && (
+        <div>
+          {inventory.length === 0 ? (
+            <div style={{ ...styles.card, textAlign: 'center', padding: '40px' }}>
+              <p style={{ color: theme.textSecondary, margin: '0 0 12px 0' }}>
+                No inventory tracked yet. Log your first purchase to get started.
+              </p>
+              <button onClick={() => setActiveTab('purchase')} style={styles.button}>
+                Log a Purchase
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {inventory.map(item => (
+                <div key={item.id} style={{
+                  ...styles.card,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px',
+                  flexWrap: 'wrap',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '200px' }}>
+                    {item.image_url && (
+                      <img src={item.image_url} alt="" style={{ width: '36px', height: '36px', borderRadius: '6px', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
+                    )}
+                    <div>
+                      <div style={{ fontWeight: '600' }}>{item.product_name}</div>
+                      {item.category && <div style={{ color: theme.textMuted, fontSize: '12px' }}>{item.category}</div>}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{item.quantity_on_hand}</div>
+                      <div style={{ color: theme.textMuted, fontSize: '11px' }}>On Hand</div>
+                    </div>
+                    {getStatusBadge(item.stock_status)}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ color: theme.textMuted, fontSize: '12px' }}>Reorder at:</span>
+                      <input
+                        type="number"
+                        defaultValue={item.reorder_threshold}
+                        min="0"
+                        style={{ ...styles.input, width: '60px', padding: '4px 8px', fontSize: '14px', textAlign: 'center' }}
+                        onBlur={(e) => {
+                          const newVal = parseInt(e.target.value);
+                          if (newVal !== item.reorder_threshold && !isNaN(newVal)) {
+                            handleThresholdUpdate(item.product_id, newVal);
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') e.target.blur();
+                        }}
+                      />
+                    </div>
+                    <button
+                      onClick={() => { setAdjustProduct(item); setAdjustQuantity(''); setAdjustNotes(''); }}
+                      style={{ ...styles.button, ...styles.buttonSecondary, fontSize: '12px', padding: '6px 10px' }}
+                    >
+                      Adjust
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Adjust Modal */}
+          {adjustProduct && (
+            <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+              <div style={{ ...styles.card, maxWidth: '400px', width: '100%' }}>
+                <h3 style={{ margin: '0 0 16px 0' }}>Adjust: {adjustProduct.product_name}</h3>
+                <p style={{ color: theme.textSecondary, margin: '0 0 16px 0' }}>
+                  Current stock: {adjustProduct.quantity_on_hand}
+                </p>
+                <form onSubmit={handleAdjust}>
+                  <div style={{ marginBottom: '12px' }}>
+                    <label style={styles.label}>Quantity Change (use negative to reduce)</label>
+                    <input
+                      type="number"
+                      value={adjustQuantity}
+                      onChange={(e) => setAdjustQuantity(e.target.value)}
+                      style={{ ...styles.input, width: '100%' }}
+                      placeholder="e.g. -5 or +10"
+                      required
+                    />
+                  </div>
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={styles.label}>Reason (required)</label>
+                    <input
+                      type="text"
+                      value={adjustNotes}
+                      onChange={(e) => setAdjustNotes(e.target.value)}
+                      style={{ ...styles.input, width: '100%' }}
+                      placeholder="e.g. Damaged, count correction, expired"
+                      required
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button type="button" onClick={() => setAdjustProduct(null)} style={{ ...styles.button, ...styles.buttonSecondary, flex: 1 }}>
+                      Cancel
+                    </button>
+                    <button type="submit" disabled={submitting} style={{ ...styles.button, flex: 1 }}>
+                      {submitting ? 'Saving...' : 'Apply Adjustment'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Log Purchase Tab */}
+      {activeTab === 'purchase' && (
+        <div style={{ ...styles.card, maxWidth: '500px' }}>
+          <h3 style={{ margin: '0 0 16px 0' }}>Log a Bulk Purchase</h3>
+          <form onSubmit={handlePurchase}>
+            <div style={{ marginBottom: '12px' }}>
+              <label style={styles.label}>Product</label>
+              <select
+                value={purchaseProductId}
+                onChange={(e) => setPurchaseProductId(e.target.value)}
+                style={{ ...styles.input, width: '100%' }}
+                required
+              >
+                <option value="">Select product...</option>
+                {products.map(p => (
+                  <option key={p.id} value={p.id}>{p.product_name}{p.category ? ` (${p.category})` : ''}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ marginBottom: '12px' }}>
+              <label style={styles.label}>Quantity Purchased</label>
+              <input
+                type="number"
+                value={purchaseQuantity}
+                onChange={(e) => setPurchaseQuantity(e.target.value)}
+                style={{ ...styles.input, width: '100%' }}
+                min="1"
+                placeholder="e.g. 50"
+                required
+              />
+            </div>
+            <div style={{ marginBottom: '16px' }}>
+              <label style={styles.label}>Notes (optional)</label>
+              <input
+                type="text"
+                value={purchaseNotes}
+                onChange={(e) => setPurchaseNotes(e.target.value)}
+                style={{ ...styles.input, width: '100%' }}
+                placeholder="e.g. Costco bulk buy, Sam's Club"
+              />
+            </div>
+            <button type="submit" disabled={submitting} style={{ ...styles.button, width: '100%' }}>
+              {submitting ? 'Logging...' : 'Log Purchase'}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Transaction History Tab */}
+      {activeTab === 'history' && (
+        <div>
+          {/* Filters */}
+          <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', flexWrap: 'wrap' }}>
+            <select
+              value={txnFilter.productId}
+              onChange={(e) => { setTxnFilter(prev => ({ ...prev, productId: e.target.value })); setTxnPage(0); }}
+              style={{ ...styles.input, width: 'auto', minWidth: '150px' }}
+            >
+              <option value="">All Products</option>
+              {products.map(p => (
+                <option key={p.id} value={p.id}>{p.product_name}</option>
+              ))}
+            </select>
+            <select
+              value={txnFilter.type}
+              onChange={(e) => { setTxnFilter(prev => ({ ...prev, type: e.target.value })); setTxnPage(0); }}
+              style={{ ...styles.input, width: 'auto', minWidth: '150px' }}
+            >
+              <option value="">All Types</option>
+              <option value="purchase">Purchase</option>
+              <option value="dispersal_to_machine">Dispersal to Machine</option>
+              <option value="direct_to_machine">Direct to Machine</option>
+              <option value="adjustment">Adjustment</option>
+            </select>
+          </div>
+
+          {transactions.length === 0 ? (
+            <div style={{ ...styles.card, textAlign: 'center', padding: '40px' }}>
+              <p style={{ color: theme.textSecondary }}>No transactions found.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {transactions.map(txn => (
+                <div key={txn.id} style={{ ...styles.card, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: '150px' }}>
+                    <div style={{ fontWeight: '600', marginBottom: '4px' }}>{txn.product_name}</div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      {getTxnTypeBadge(txn.transaction_type)}
+                      {txn.machine_name && (
+                        <span style={{ color: theme.textMuted, fontSize: '12px' }}>{txn.machine_name}</span>
+                      )}
+                    </div>
+                    {txn.notes && <div style={{ color: theme.textMuted, fontSize: '12px', marginTop: '4px' }}>{txn.notes}</div>}
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontWeight: 'bold', color: txn.quantity > 0 ? theme.success : theme.danger, fontSize: '16px' }}>
+                      {txn.quantity > 0 ? '+' : ''}{txn.quantity}
+                    </div>
+                    <div style={{ color: theme.textMuted, fontSize: '11px' }}>
+                      {txn.quantity_before} → {txn.quantity_after}
+                    </div>
+                    <div style={{ color: theme.textMuted, fontSize: '11px' }}>
+                      {new Date(txn.created_at).toLocaleDateString()}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* Pagination */}
+              {txnTotal > 50 && (
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '16px' }}>
+                  <button
+                    disabled={txnPage === 0}
+                    onClick={() => setTxnPage(p => p - 1)}
+                    style={{ ...styles.button, ...styles.buttonSecondary }}
+                  >
+                    Previous
+                  </button>
+                  <span style={{ ...styles.badge, display: 'flex', alignItems: 'center' }}>
+                    Page {txnPage + 1} of {Math.ceil(txnTotal / 50)}
+                  </span>
+                  <button
+                    disabled={(txnPage + 1) * 50 >= txnTotal}
+                    onClick={() => setTxnPage(p => p + 1)}
+                    style={{ ...styles.button, ...styles.buttonSecondary }}
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ExpiringProducts() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -4873,6 +5419,7 @@ function App() {
             <Route path="/vendor/route-plan" element={<ProtectedRoute><RoutePlan /></ProtectedRoute>} />
             <Route path="/vendor/suggestions" element={<ProtectedRoute><Suggestions /></ProtectedRoute>} />
             <Route path="/vendor/expiring" element={<ProtectedRoute><ExpiringProducts /></ProtectedRoute>} />
+            <Route path="/vendor/inventory" element={<ProtectedRoute><InventoryManagement /></ProtectedRoute>} />
 
             {/* Customer Routes (Anonymous) */}
             <Route path="/customer/machine/:qr_token" element={<CustomerMachine />} />
