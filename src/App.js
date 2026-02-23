@@ -1682,6 +1682,14 @@ function MachineDetails() {
   const [redistributionLoading, setRedistributionLoading] = useState(false);
   const [transferQuantity, setTransferQuantity] = useState(1);
   const [selectedTargetMachine, setSelectedTargetMachine] = useState(null);
+  // Batch redistribution queue state
+  const [redistQueue, setRedistQueue] = useState([]);
+  const [batchSubmitting, setBatchSubmitting] = useState(false);
+  const [batchResults, setBatchResults] = useState(null);
+  // Auto distribute state
+  const [autoDistSuggestions, setAutoDistSuggestions] = useState(null);
+  const [autoDistLoading, setAutoDistLoading] = useState(false);
+  const [autoDistExecuting, setAutoDistExecuting] = useState(false);
   // Notes state
   const [notes, setNotes] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
@@ -1931,33 +1939,118 @@ function MachineDetails() {
     }
   };
 
-  const handleExecuteRedistribution = async () => {
+  const getQueuedQuantity = (productId) => {
+    return redistQueue
+      .filter(m => m.product.product_id === productId)
+      .reduce((sum, m) => sum + m.quantity, 0);
+  };
+
+  const getEffectiveStock = (item) => {
+    return item.current_stock - getQueuedQuantity(item.product_id);
+  };
+
+  const handleAddToQueue = () => {
     if (!selectedProductForRedist || !selectedTargetMachine || transferQuantity < 1) return;
 
-    if (transferQuantity > selectedProductForRedist.current_stock) {
-      toast.error(`Cannot transfer more than available stock (${selectedProductForRedist.current_stock})`);
+    const effectiveStock = getEffectiveStock(selectedProductForRedist);
+    if (transferQuantity > effectiveStock) {
+      toast.error(`Cannot transfer more than effective stock (${effectiveStock})`);
       return;
     }
 
+    setRedistQueue(prev => [...prev, {
+      id: Date.now() + Math.random(),
+      product: selectedProductForRedist,
+      targetMachine: selectedTargetMachine,
+      quantity: transferQuantity,
+    }]);
+
+    toast.success(`Added ${transferQuantity}x ${selectedProductForRedist.product_name} → ${selectedTargetMachine.machine_name} to queue`);
+    setSelectedProductForRedist(null);
+    setSelectedTargetMachine(null);
+    setTransferQuantity(1);
+    setRedistributionTargets([]);
+  };
+
+  const handleRemoveFromQueue = (moveId) => {
+    setRedistQueue(prev => prev.filter(m => m.id !== moveId));
+  };
+
+  const handleCommitBatch = async () => {
+    if (redistQueue.length === 0) return;
     try {
-      setRedistributionLoading(true);
-      await vendorAPI.executeRedistribution({
-        sourceMachineId: parseInt(id),
-        targetMachineId: selectedTargetMachine.machine_id,
-        productId: selectedProductForRedist.product_id,
-        quantity: transferQuantity,
-        reason: 'Product redistribution to optimize performance'
+      setBatchSubmitting(true);
+      const response = await vendorAPI.executeBatchRedistribution({
+        moves: redistQueue.map(m => ({
+          sourceMachineId: parseInt(id),
+          targetMachineId: m.targetMachine.machine_id,
+          productId: m.product.product_id,
+          quantity: m.quantity,
+        })),
+        reason: 'Batch product redistribution',
       });
-      toast.success(`Transferred ${transferQuantity} units to ${selectedTargetMachine.machine_name}`);
+      const results = response.data?.data;
+      // Clear all redistribution state
+      setRedistQueue([]);
       setSelectedProductForRedist(null);
       setSelectedTargetMachine(null);
       setTransferQuantity(1);
-      setShowRedistribution(false);
+      setRedistributionTargets([]);
+      setBatchSubmitting(false);
+      // Show summary briefly, then auto-close
+      setBatchResults(results);
+      toast.success(`Done! ${results?.totalMoves} transfers completed (${results?.totalUnitsTransferred} units moved)`);
+      // Reload inventory so fully-transferred products disappear
       loadMachineData(true);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to execute redistribution');
+      toast.error(err.response?.data?.message || 'Batch redistribution failed');
+      setBatchSubmitting(false);
+    }
+  };
+
+  const handleCloseBatchSummary = () => {
+    setBatchResults(null);
+    setShowRedistribution(false);
+  };
+
+  const handleAutoDistribute = async () => {
+    try {
+      setAutoDistLoading(true);
+      const response = await vendorAPI.getAutoDistribute(id);
+      const data = response.data?.data;
+      if (data?.moves?.length === 0) {
+        toast.info('No redistribution needed — all products are performing well or no better placement found.');
+        setAutoDistSuggestions(null);
+      } else {
+        setAutoDistSuggestions(data);
+      }
+    } catch (err) {
+      toast.error('Failed to generate auto-distribute suggestions');
     } finally {
-      setRedistributionLoading(false);
+      setAutoDistLoading(false);
+    }
+  };
+
+  const handleApproveAutoDistribute = async () => {
+    if (!autoDistSuggestions?.moves?.length) return;
+    try {
+      setAutoDistExecuting(true);
+      await vendorAPI.executeBatchRedistribution({
+        moves: autoDistSuggestions.moves.map(m => ({
+          sourceMachineId: parseInt(id),
+          targetMachineId: m.targetMachineId,
+          productId: m.productId,
+          quantity: m.quantity,
+        })),
+        reason: 'Auto-distribute: move non-performing products to better machines',
+      });
+      toast.success(`Auto-distribute complete! ${autoDistSuggestions.summary.totalMoves} transfers (${autoDistSuggestions.summary.totalUnits} units)`);
+      setAutoDistSuggestions(null);
+      loadMachineData(true);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Auto-distribute failed');
+    } finally {
+      setAutoDistExecuting(false);
     }
   };
 
@@ -2165,7 +2258,7 @@ function MachineDetails() {
       {/* Inventory Section */}
       <div style={{ marginBottom: '32px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h2 style={{ margin: 0 }}>Planogram ({inventory.length}/40 products)</h2>
+          <h2 style={{ margin: 0 }}>Planogram ({inventory.length}/60 products)</h2>
           <button onClick={() => setShowAddForm(!showAddForm)} style={{ ...styles.button, ...styles.buttonSuccess }}>
             {showAddForm ? 'Cancel' : '+ Add Product'}
           </button>
@@ -2421,14 +2514,67 @@ function MachineDetails() {
           </div>
         )}
 
-        {/* Redistribute Button */}
+        {/* Redistribute Buttons */}
         {inventory.length > 0 && (
-          <button
-            onClick={() => setShowRedistribution(!showRedistribution)}
-            style={{ ...styles.button, marginTop: '16px', backgroundColor: showRedistribution ? theme.warning : theme.primary }}
-          >
-            {showRedistribution ? 'Close Redistribution' : 'Redistribute Products'}
-          </button>
+          <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+            <button
+              onClick={() => { setShowRedistribution(!showRedistribution); setAutoDistSuggestions(null); }}
+              style={{ ...styles.button, backgroundColor: showRedistribution ? theme.warning : theme.primary }}
+            >
+              {showRedistribution ? 'Close Redistribution' : 'Redistribute Products'}
+            </button>
+            <button
+              onClick={handleAutoDistribute}
+              disabled={autoDistLoading}
+              style={{ ...styles.button, backgroundColor: theme.secondary, opacity: autoDistLoading ? 0.7 : 1 }}
+            >
+              {autoDistLoading ? 'Analyzing...' : 'Auto Distribute'}
+            </button>
+          </div>
+        )}
+
+        {/* Auto Distribute Suggestions */}
+        {autoDistSuggestions && (
+          <div style={{ ...styles.card, marginTop: '16px', borderLeft: `4px solid ${theme.secondary}` }}>
+            <h3 style={{ margin: '0 0 4px 0' }}>Auto Distribute Suggestions</h3>
+            <p style={{ color: theme.textMuted, fontSize: '14px', margin: '0 0 16px 0' }}>
+              {autoDistSuggestions.summary.totalProducts} products, {autoDistSuggestions.summary.totalUnits} units across {autoDistSuggestions.summary.totalMoves} moves — based on performance history
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '300px', overflowY: 'auto', marginBottom: '16px' }}>
+              {autoDistSuggestions.moves.map((move, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: theme.surfaceHover, borderRadius: '8px', fontSize: '14px' }}>
+                  <span><strong>{move.quantity}x</strong> {move.productName} → {move.targetMachineName}</span>
+                  <span style={{ color: move.targetIsPerforming ? theme.success : theme.textMuted, fontSize: '12px' }}>
+                    {move.targetIsPerforming ? 'Performing' : `${move.targetPositiveMarks} positive marks`}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {autoDistSuggestions.summary.skipped.length > 0 && (
+              <p style={{ color: theme.textMuted, fontSize: '13px', margin: '0 0 12px 0' }}>
+                Skipped: {autoDistSuggestions.summary.skipped.map(s => s.productName).join(', ')} (no better placement found)
+              </p>
+            )}
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={handleApproveAutoDistribute}
+                disabled={autoDistExecuting}
+                style={{ ...styles.button, ...styles.buttonSuccess, flex: 1, fontSize: '16px', padding: '14px', opacity: autoDistExecuting ? 0.7 : 1 }}
+              >
+                {autoDistExecuting ? 'Distributing...' : `Approve & Execute (${autoDistSuggestions.summary.totalMoves} transfers)`}
+              </button>
+              <button
+                onClick={() => setAutoDistSuggestions(null)}
+                disabled={autoDistExecuting}
+                style={{ ...styles.button, backgroundColor: theme.surfaceHover }}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
         )}
       </div>
 
@@ -2445,30 +2591,35 @@ function MachineDetails() {
             <div>
               <h3 style={{ marginBottom: '12px', color: theme.textSecondary }}>Select Product to Move</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '400px', overflowY: 'auto' }}>
-                {inventory.filter(item => item.current_stock > 0).map(item => (
-                  <div
-                    key={item.id}
-                    onClick={() => handleSelectProductForRedist(item)}
-                    style={{
-                      ...styles.card,
-                      cursor: 'pointer',
-                      borderLeft: `4px solid ${selectedProductForRedist?.id === item.id ? theme.primary : 'transparent'}`,
-                      backgroundColor: selectedProductForRedist?.id === item.id ? theme.surfaceHover : theme.surface,
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <p style={{ margin: 0, fontWeight: '600' }}>{item.product_name}</p>
-                        <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: theme.textMuted }}>
-                          Stock: {item.current_stock} • {item.is_performing === true ? 'Performing' : item.is_performing === false ? 'Not Performing' : 'Unmarked'}
-                        </p>
+                {inventory.filter(item => item.current_stock > 0).map(item => {
+                  const effectiveStock = getEffectiveStock(item);
+                  const isDisabled = effectiveStock <= 0;
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => !isDisabled && handleSelectProductForRedist(item)}
+                      style={{
+                        ...styles.card,
+                        cursor: isDisabled ? 'default' : 'pointer',
+                        opacity: isDisabled ? 0.5 : 1,
+                        borderLeft: `4px solid ${selectedProductForRedist?.id === item.id ? theme.primary : 'transparent'}`,
+                        backgroundColor: selectedProductForRedist?.id === item.id ? theme.surfaceHover : theme.surface,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <p style={{ margin: 0, fontWeight: '600' }}>{item.product_name}</p>
+                          <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: theme.textMuted }}>
+                            Stock: {item.current_stock}{getQueuedQuantity(item.product_id) > 0 ? ` (${effectiveStock} available)` : ''} • {item.is_performing === true ? 'Performing' : item.is_performing === false ? 'Not Performing' : 'Unmarked'}
+                          </p>
+                        </div>
+                        {selectedProductForRedist?.id === item.id && (
+                          <span style={{ color: theme.primary, fontSize: '20px' }}>→</span>
+                        )}
                       </div>
-                      {selectedProductForRedist?.id === item.id && (
-                        <span style={{ color: theme.primary, fontSize: '20px' }}>→</span>
-                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -2540,22 +2691,22 @@ function MachineDetails() {
                     <input
                       type="number"
                       min="1"
-                      max={selectedProductForRedist.current_stock}
+                      max={getEffectiveStock(selectedProductForRedist)}
                       value={transferQuantity}
-                      onChange={(e) => setTransferQuantity(Math.min(parseInt(e.target.value) || 1, selectedProductForRedist.current_stock))}
+                      onChange={(e) => setTransferQuantity(Math.min(parseInt(e.target.value) || 1, getEffectiveStock(selectedProductForRedist)))}
                       style={{ ...styles.input, width: '80px' }}
                     />
                     <span style={{ color: theme.textMuted, fontSize: '14px' }}>
-                      of {selectedProductForRedist.current_stock} available
+                      of {getEffectiveStock(selectedProductForRedist)} available{getQueuedQuantity(selectedProductForRedist.product_id) > 0 ? ` (${selectedProductForRedist.current_stock} total, ${getQueuedQuantity(selectedProductForRedist.product_id)} queued)` : ''}
                     </span>
                   </div>
                   <div style={{ display: 'flex', gap: '12px' }}>
                     <button
-                      onClick={handleExecuteRedistribution}
+                      onClick={handleAddToQueue}
                       disabled={redistributionLoading}
                       style={{ ...styles.button, ...styles.buttonSuccess, flex: 1 }}
                     >
-                      {redistributionLoading ? 'Transferring...' : `Transfer ${transferQuantity} units`}
+                      Add to Queue ({transferQuantity} units)
                     </button>
                     <button
                       onClick={handleCancelRedistribution}
@@ -2568,6 +2719,76 @@ function MachineDetails() {
               )}
             </div>
           </div>
+
+          {/* Queue Panel */}
+          {redistQueue.length > 0 && !batchResults && (
+            <div style={{ ...styles.card, marginTop: '16px' }}>
+              <h3 style={{ margin: '0 0 12px 0' }}>Queued Transfers ({redistQueue.length})</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+                {redistQueue.map(move => (
+                  <div key={move.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: theme.surfaceHover, borderRadius: '8px' }}>
+                    <span>
+                      <strong>{move.quantity}x</strong> {move.product.product_name} → {move.targetMachine.machine_name}
+                    </span>
+                    <button
+                      onClick={() => handleRemoveFromQueue(move.id)}
+                      style={{ background: 'none', border: 'none', color: theme.danger, cursor: 'pointer', fontSize: '18px', padding: '0 4px' }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <p style={{ color: theme.textMuted, fontSize: '14px', margin: '0 0 12px 0' }}>
+                Total: {redistQueue.reduce((sum, m) => sum + m.quantity, 0)} units across {redistQueue.length} transfers
+              </p>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  onClick={handleCommitBatch}
+                  disabled={batchSubmitting}
+                  style={{ ...styles.button, ...styles.buttonSuccess, flex: 1, opacity: batchSubmitting ? 0.7 : 1 }}
+                >
+                  {batchSubmitting ? 'Committing transfers... please wait' : `Commit All Transfers (${redistQueue.length})`}
+                </button>
+                <button
+                  onClick={() => setRedistQueue([])}
+                  disabled={batchSubmitting}
+                  style={{ ...styles.button, backgroundColor: theme.surfaceHover, opacity: batchSubmitting ? 0.5 : 1 }}
+                >
+                  Clear Queue
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Batch Summary View */}
+          {batchResults && (
+            <div style={{ ...styles.card, marginTop: '16px', borderLeft: `4px solid ${theme.success}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <span style={{ fontSize: '20px' }}>&#10003;</span>
+                <h3 style={{ margin: 0, color: theme.success }}>All Transfers Complete</h3>
+              </div>
+              <p style={{ color: theme.textMuted, fontSize: '14px', margin: '0 0 16px 0' }}>
+                {batchResults.totalMoves} transfers, {batchResults.totalUnitsTransferred} total units moved. Inventory has been updated.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+                {batchResults.moves.map((move, i) => (
+                  <div key={i} style={{ padding: '10px 12px', backgroundColor: theme.surfaceHover, borderRadius: '8px', fontSize: '14px' }}>
+                    <div><strong>{move.quantity}x</strong> {move.productName} → {move.targetMachine}</div>
+                    <div style={{ color: theme.textMuted, marginTop: '4px' }}>
+                      Source: {move.sourceStockBefore} → {move.sourceStockAfter} | Target: {move.targetStockBefore} → {move.targetStockAfter}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={handleCloseBatchSummary}
+                style={{ ...styles.button, ...styles.buttonSuccess, width: '100%', fontSize: '16px', padding: '14px' }}
+              >
+                Done — Close Redistribution
+              </button>
+            </div>
+          )}
         </div>
       )}
 

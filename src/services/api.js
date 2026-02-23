@@ -232,6 +232,8 @@ export const vendorAPI = {
   getRedistributionTargets: (machineId, productId) =>
     api.get(`/vendor/machines/${machineId}/redistribution-targets?productId=${productId}`),
   executeRedistribution: (data) => api.post('/vendor/redistribution', data),
+  executeBatchRedistribution: (data) => api.post('/vendor/redistribution/batch', data),
+  getAutoDistribute: (machineId) => api.get(`/vendor/machines/${machineId}/auto-distribute`),
   getRedistributionHistory: (machineId, limit = 50) =>
     api.get(`/vendor/redistribution-history?machineId=${machineId}&limit=${limit}`),
 
