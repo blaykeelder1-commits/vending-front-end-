@@ -1,8 +1,8 @@
 // IDDI Service Worker v1.0.0
 // Provides offline support and caching for PWA functionality
 
-const CACHE_NAME = 'iddi-cache-v1';
-const STATIC_CACHE_NAME = 'iddi-static-v1';
+const CACHE_NAME = 'iddi-cache-v2';
+const STATIC_CACHE_NAME = 'iddi-static-v2';
 
 // Core app shell files to cache immediately
 const APP_SHELL_FILES = [

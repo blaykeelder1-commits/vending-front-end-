@@ -320,6 +320,23 @@ export const wakeBackend = () => {
   api.get('/health').catch(() => {});
 };
 
+// Keep backend alive while app is open (ping every 13 minutes)
+let keepAliveInterval = null;
+export const startKeepAlive = () => {
+  if (keepAliveInterval) return;
+  wakeBackend();
+  keepAliveInterval = setInterval(() => {
+    api.get('/health').catch(() => {});
+  }, 13 * 60 * 1000); // 13 minutes (Render sleeps after 15)
+};
+
+export const stopKeepAlive = () => {
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
+    keepAliveInterval = null;
+  }
+};
+
 // Fire immediately on module load
 wakeBackend();
 

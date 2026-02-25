@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useContext, createContext, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate, useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
-import { authAPI, vendorAPI, customerAPI, publicAPI } from './services/api';
+import { authAPI, vendorAPI, customerAPI, publicAPI, wakeBackend, startKeepAlive, stopKeepAlive } from './services/api';
 import QRCode from 'qrcode';
 
 import ErrorBoundary from './components/ErrorBoundary';
@@ -68,20 +68,20 @@ const ToastContainer = React.memo(function ToastContainer({ toasts }) {
 
 const Toast = React.memo(function Toast({ message, type }) {
   const colors = {
-    success: { bg: '#22c55e20', border: '#22c55e', text: '#22c55e' },
-    error: { bg: '#ef444420', border: '#ef4444', text: '#ef4444' },
-    info: { bg: '#8b5cf620', border: '#8b5cf6', text: '#8b5cf6' },
-    warning: { bg: '#f59e0b20', border: '#f59e0b', text: '#f59e0b' },
+    success: { bg: '#34d39920', border: '#34d399', text: '#34d399' },
+    error: { bg: '#f8717120', border: '#f87171', text: '#f87171' },
+    info: { bg: '#7c6df020', border: '#7c6df0', text: '#7c6df0' },
+    warning: { bg: '#fbbf2420', border: '#fbbf24', text: '#fbbf24' },
   };
   const color = colors[type] || colors.info;
 
   return (
     <div style={{
       padding: '12px 20px',
-      backgroundColor: '#1a1a1a',
+      backgroundColor: '#1a1a2e',
       border: `1px solid ${color.border}`,
       borderLeft: `4px solid ${color.border}`,
-      borderRadius: '8px',
+      borderRadius: '6px',
       color: color.text,
       minWidth: '280px',
       maxWidth: '400px',
@@ -97,19 +97,19 @@ const Toast = React.memo(function Toast({ message, type }) {
 // THEME / STYLES
 // ============================================
 const theme = {
-  bg: '#0f0f0f',
-  surface: '#1a1a1a',
-  surfaceHover: '#252525',
-  border: '#2a2a2a',
-  primary: '#8b5cf6',
-  primaryHover: '#7c3aed',
+  bg: '#0d0d1a',
+  surface: '#1a1a2e',
+  surfaceHover: '#252540',
+  border: '#2a2a4a',
+  primary: '#7c6df0',
+  primaryHover: '#6b5ce0',
   secondary: '#06b6d4', // Cyan color for discovery polls
-  success: '#22c55e',
-  danger: '#ef4444',
-  warning: '#f59e0b',
-  text: '#ffffff',
-  textSecondary: '#a1a1aa',
-  textMuted: '#71717a',
+  success: '#34d399',
+  danger: '#f87171',
+  warning: '#fbbf24',
+  text: '#f0f0f5',
+  textSecondary: '#9d9db5',
+  textMuted: '#6b6b85',
 };
 
 const styles = {
@@ -124,7 +124,7 @@ const styles = {
   card: {
     backgroundColor: theme.surface,
     border: `1px solid ${theme.border}`,
-    borderRadius: '12px',
+    borderRadius: '8px',
     padding: '16px',
   },
   flexCenter: {
@@ -159,11 +159,13 @@ const styles = {
     fontWeight: '600',
   },
   button: {
-    padding: '10px 16px',
+    padding: '12px 16px',
+    minHeight: '44px',
+    boxSizing: 'border-box',
     backgroundColor: theme.primary,
     color: 'white',
     border: 'none',
-    borderRadius: '8px',
+    borderRadius: '6px',
     cursor: 'pointer',
     fontWeight: '600',
     transition: 'all 0.2s',
@@ -185,9 +187,10 @@ const styles = {
     padding: '12px 16px',
     backgroundColor: theme.surface,
     border: `1px solid ${theme.border}`,
-    borderRadius: '8px',
+    borderRadius: '6px',
     color: theme.text,
     fontSize: '16px',
+    boxSizing: 'border-box',
   },
   label: {
     display: 'block',
@@ -226,14 +229,14 @@ function MobileNav({ isOpen, onClose, onLogout }) {
   }, [isOpen]);
 
   const navLinks = [
-    { to: '/vendor/dashboard', label: 'Dashboard', icon: '🏠' },
-    { to: '/vendor/analytics', label: 'Analytics', icon: '📈' },
-    { to: '/vendor/route-plan', label: 'Route Plan', icon: '📋' },
-    { to: '/vendor/suggestions', label: 'Suggestions', icon: '💡' },
-    { to: '/vendor/inventory', label: 'Inventory', icon: '📦' },
-    { to: '/vendor/expiring', label: 'Expiring', icon: '⏰' },
-    { to: '/vendor/poll-summary', label: 'Shopping List', icon: '🛒' },
-    { to: '/vendor/top-products', label: 'Top 50', icon: '🏆' },
+    { to: '/vendor/dashboard', label: 'Dashboard' },
+    { to: '/vendor/analytics', label: 'Analytics' },
+    { to: '/vendor/route-plan', label: 'Route Plan' },
+    { to: '/vendor/suggestions', label: 'Suggestions' },
+    { to: '/vendor/inventory', label: 'Inventory' },
+    { to: '/vendor/expiring', label: 'Expiring Products' },
+    { to: '/vendor/poll-summary', label: 'Shopping List' },
+    { to: '/vendor/top-products', label: 'Top 50 Products' },
   ];
 
   return (
@@ -250,14 +253,12 @@ function MobileNav({ isOpen, onClose, onLogout }) {
             className={location.pathname === link.to ? 'active' : ''}
             onClick={onClose}
           >
-            <span>{link.icon}</span>
             {link.label}
           </Link>
         ))}
-        <hr style={{ border: 'none', borderTop: '1px solid #2a2a2a', margin: '16px 0' }} />
+        <hr style={{ border: 'none', borderTop: `1px solid ${theme.border}`, margin: '16px 0' }} />
         <button onClick={() => { onLogout(); onClose(); }}>
-          <span>🚪</span>
-          Logout
+          Sign Out
         </button>
       </div>
     </div>
@@ -295,6 +296,133 @@ function useIsMobile(breakpoint = 768) {
   }, [breakpoint]);
 
   return isMobile;
+}
+
+// ============================================
+// VENDOR LAYOUT — provides mobile nav on ALL vendor pages
+// ============================================
+
+function VendorLayout({ children }) {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const isMobile = useIsMobile();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Keep backend alive while vendor is using the app
+  useEffect(() => {
+    startKeepAlive();
+    return () => stopKeepAlive();
+  }, []);
+
+  // Close menu on route change
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [location.pathname]);
+
+  const handleLogout = () => {
+    stopKeepAlive();
+    localStorage.removeItem('token');
+    localStorage.removeItem('userType');
+    navigate('/vendor/login');
+  };
+
+  if (!isMobile) {
+    return <>{children}</>;
+  }
+
+  return (
+    <>
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: '56px',
+        background: theme.surface,
+        borderBottom: `1px solid ${theme.border}`,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 16px',
+        zIndex: 1001,
+      }}>
+        <span style={{ color: '#fff', fontWeight: '700', fontSize: '18px', letterSpacing: '2px' }}>IDDI</span>
+        <button
+          onClick={handleLogout}
+          style={{
+            background: 'none',
+            border: `1px solid ${theme.border}`,
+            color: theme.textSecondary,
+            fontSize: '13px',
+            padding: '6px 14px',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            minHeight: '36px',
+          }}
+        >
+          Sign Out
+        </button>
+      </div>
+      <div style={{ paddingTop: '64px', paddingBottom: '64px' }}>
+        {children}
+      </div>
+      <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: '56px',
+        background: theme.surface,
+        borderTop: `1px solid ${theme.border}`,
+        display: 'flex',
+        justifyContent: 'space-around',
+        alignItems: 'center',
+        zIndex: 999,
+        padding: '0 8px',
+      }}>
+        {[
+          { to: '/vendor/dashboard', label: 'Home' },
+          { to: '/vendor/inventory', label: 'Inventory' },
+          { to: '/vendor/route-plan', label: 'Routes' },
+          { to: '/vendor/top-products', label: 'Top 50' },
+          { to: '/vendor/poll-summary', label: 'Shop' },
+          { to: '/vendor/analytics', label: 'Stats' },
+        ].map(item => {
+          const isActive = location.pathname === item.to;
+          return (
+            <button
+              key={item.to}
+              onClick={() => navigate(item.to)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: isActive ? '#f0f0f5' : '#6b6b85',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '11px',
+                padding: '8px 4px',
+                minHeight: '44px',
+                minWidth: '44px',
+                cursor: 'pointer',
+                fontWeight: isActive ? '600' : '400',
+                letterSpacing: '0.3px',
+              }}
+            >
+              {item.label}
+              <span style={{
+                width: '4px',
+                height: '4px',
+                borderRadius: '50%',
+                backgroundColor: isActive ? '#7c6df0' : 'transparent',
+              }} />
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
 }
 
 // ============================================
@@ -343,6 +471,11 @@ function VendorLogin() {
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
   const navigate = useNavigate();
   const googleButtonRef = useRef(null);
+
+  // Pre-warm backend on login page mount (Render cold start mitigation)
+  useEffect(() => {
+    wakeBackend();
+  }, []);
 
   // Detect in-app browsers (WebViews) that Google blocks for OAuth
   // and mobile browsers that need redirect-based OAuth
@@ -1176,7 +1309,6 @@ function VendorDashboard() {
   const [expiringCount, setExpiringCount] = useState(0);
   const [pendingSuggestions, setPendingSuggestions] = useState(0);
   const [lowStockCount, setLowStockCount] = useState(0);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const toast = useToast();
   const isMobile = useIsMobile();
@@ -1271,15 +1403,6 @@ function VendorDashboard() {
 
   return (
     <div style={styles.page}>
-      {/* Mobile Navigation */}
-      {isMobile && (
-        <MobileNav
-          isOpen={isMobileMenuOpen}
-          onClose={() => setIsMobileMenuOpen(false)}
-          onLogout={handleLogout}
-        />
-      )}
-
       {/* Header */}
       <div style={{ marginBottom: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -1289,12 +1412,6 @@ function VendorDashboard() {
               Manage your vending machines and products
             </p>
           </div>
-          {isMobile && (
-            <MobileMenuButton
-              isOpen={isMobileMenuOpen}
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            />
-          )}
         </div>
 
         {/* Desktop Navigation - hidden on mobile */}
@@ -1306,13 +1423,13 @@ function VendorDashboard() {
             maxWidth: '100%'
           }}>
             <Link to="/vendor/analytics" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              📈 Analytics
+              Analytics
             </Link>
             <Link to="/vendor/route-plan" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              📋 Route Plan
+              Route Plan
             </Link>
             <Link to="/vendor/suggestions" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', position: 'relative', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              💡 Suggestions
+              Suggestions
               {pendingSuggestions > 0 && (
                 <span style={{
                   position: 'absolute',
@@ -1332,7 +1449,7 @@ function VendorDashboard() {
               )}
             </Link>
             <Link to="/vendor/inventory" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', position: 'relative', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              📦 Inventory
+              Inventory
               {lowStockCount > 0 && (
                 <span style={{
                   position: 'absolute',
@@ -1352,7 +1469,7 @@ function VendorDashboard() {
               )}
             </Link>
             <Link to="/vendor/expiring" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', position: 'relative', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              ⏰ Expiring
+              Expiring
               {expiringCount > 0 && (
                 <span style={{
                   position: 'absolute',
@@ -1372,10 +1489,10 @@ function VendorDashboard() {
               )}
             </Link>
             <Link to="/vendor/poll-summary" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              🛒 Shopping List
+              Shopping List
             </Link>
             <Link to="/vendor/top-products" style={{ ...styles.button, ...styles.buttonSecondary, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              🏆 Top 50
+              Top 50
             </Link>
             <button onClick={loadData} style={{ ...styles.button, ...styles.buttonSecondary }}>
               ↻ Refresh
@@ -1398,7 +1515,7 @@ function VendorDashboard() {
 
       {/* Machines Section */}
       <div style={{ marginBottom: '48px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '8px' }}>
           <h2 style={{ margin: 0 }}>Vending Machines ({machines.length})</h2>
           <button onClick={() => setShowMachineForm(!showMachineForm)} style={{ ...styles.button, ...styles.buttonSuccess }}>
             {showMachineForm ? 'Cancel' : '+ Add Machine'}
@@ -1411,9 +1528,9 @@ function VendorDashboard() {
           {machines.map(machine => (
             <div key={machine.id} style={styles.card}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
-                <h3 style={{ margin: 0 }}>{machine.machine_name}</h3>
+                <h3 style={{ margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1, marginRight: '8px' }}>{machine.machine_name}</h3>
                 <span style={{
-                  padding: '4px 12px',
+                  padding: '4px 12px', flexShrink: 0, whiteSpace: 'nowrap',
                   borderRadius: '20px',
                   fontSize: '12px',
                   backgroundColor: machine.is_active ? theme.success + '20' : theme.danger + '20',
@@ -1423,16 +1540,16 @@ function VendorDashboard() {
                 </span>
               </div>
               <p style={{ color: theme.textSecondary, margin: '0 0 8px 0' }}>
-                📍 {machine.location}
+                {machine.location}
               </p>
               {machine.last_visit_at && (
                 <p style={{ color: theme.textMuted, margin: '0 0 12px 0', fontSize: '13px' }}>
-                  🕐 Last visit: {formatTimeAgo(machine.last_visit_at)}
+                  Last visit:{formatTimeAgo(machine.last_visit_at)}
                 </p>
               )}
 
               {/* Performance Stats */}
-              <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', gap: '16px', marginBottom: '16px', flexWrap: 'wrap' }}>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '24px', fontWeight: 'bold', color: theme.success }}>
                     {machine.performing_count || 0}
@@ -1465,7 +1582,7 @@ function VendorDashboard() {
                   style={{ ...styles.button, backgroundColor: theme.danger, fontSize: '14px', padding: '10px' }}
                   title="Delete machine"
                 >
-                  🗑️
+                  Remove
                 </button>
               </div>
             </div>
@@ -1481,7 +1598,7 @@ function VendorDashboard() {
 
       {/* Products Section */}
       <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '8px' }}>
           <h2 style={{ margin: 0 }}>Product Library ({products.length})</h2>
           <button onClick={() => setShowProductForm(!showProductForm)} style={{ ...styles.button, ...styles.buttonSuccess }}>
             {showProductForm ? 'Cancel' : '+ Add Product'}
@@ -1702,6 +1819,7 @@ function MachineDetails() {
   const [submittingVisit, setSubmittingVisit] = useState(false);
   // Visit history state
   const [visitChanges, setVisitChanges] = useState(null);
+  const isMobile = useIsMobile();
   const [showVisitDetails, setShowVisitDetails] = useState(false);
   const toast = useToast();
 
@@ -2074,12 +2192,12 @@ function MachineDetails() {
       {/* Machine Header */}
       <div style={{ ...styles.card, marginBottom: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-          <div>
-            <h1 style={{ margin: '0 0 8px 0' }}>{machine?.machine_name}</h1>
-            <p style={{ color: theme.textSecondary, margin: 0 }}>📍 {machine?.location}</p>
+          <div style={{ minWidth: 0, flex: 1, marginRight: '8px' }}>
+            <h1 style={{ margin: '0 0 8px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{machine?.machine_name}</h1>
+            <p style={{ color: theme.textSecondary, margin: 0 }}>{machine?.location}</p>
           </div>
           <span style={{
-            padding: '6px 16px',
+            padding: '6px 16px', flexShrink: 0, whiteSpace: 'nowrap',
             borderRadius: '20px',
             backgroundColor: machine?.is_active ? theme.success + '20' : theme.danger + '20',
             color: machine?.is_active ? theme.success : theme.danger
@@ -2123,8 +2241,8 @@ function MachineDetails() {
             style={{ cursor: 'pointer' }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '16px' }}>
-                📋 Since Last Visit
+              <h3 style={{ margin: 0, fontSize: '16px', minWidth: 0, flex: 1 }}>
+                Since Last Visit
                 <span style={{ fontWeight: 'normal', color: theme.textMuted, fontSize: '14px', marginLeft: '8px' }}>
                   ({formatTimeAgo(visitChanges.lastVisitAt)})
                 </span>
@@ -2178,11 +2296,11 @@ function MachineDetails() {
                                        change.actionType === 'product_removed' ? theme.danger + '30' : theme.border,
                       fontSize: '12px'
                     }}>
-                      {change.actionType === 'performance_change' ? '📊' :
-                       change.actionType === 'product_added' ? '➕' :
-                       change.actionType === 'product_removed' ? '➖' : '📝'}
+                      {change.actionType === 'performance_change' ? '~' :
+                       change.actionType === 'product_added' ? '+' :
+                       change.actionType === 'product_removed' ? '-' : '*'}
                     </span>
-                    <div style={{ flex: 1 }}>
+                    <div style={{ flex: 1, minWidth: 0, wordBreak: 'break-word' }}>
                       {change.actionType === 'performance_change' && (
                         <span>
                           <strong>{change.details.product_name}</strong>
@@ -2213,7 +2331,7 @@ function MachineDetails() {
                         </span>
                       )}
                     </div>
-                    <span style={{ color: theme.textMuted, fontSize: '12px' }}>
+                    <span style={{ color: theme.textMuted, fontSize: '12px', flexShrink: 0, whiteSpace: 'nowrap' }}>
                       {formatTimeAgo(change.createdAt)}
                     </span>
                   </div>
@@ -2257,7 +2375,7 @@ function MachineDetails() {
 
       {/* Inventory Section */}
       <div style={{ marginBottom: '32px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
           <h2 style={{ margin: 0 }}>Planogram ({inventory.length}/60 products)</h2>
           <button onClick={() => setShowAddForm(!showAddForm)} style={{ ...styles.button, ...styles.buttonSuccess }}>
             {showAddForm ? 'Cancel' : '+ Add Product'}
@@ -2354,16 +2472,13 @@ function MachineDetails() {
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                  {item.image_url && (
-                    <img
-                      src={item.image_url}
-                      alt={item.product_name}
-                      style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '6px', flexShrink: 0 }}
-                      onError={(e) => { e.target.style.display = 'none'; }}
-                    />
-                  )}
-                  <div>
-                    <h4 style={{ margin: '0 0 4px 0' }}>{item.product_name}</h4>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '6px', background: theme.border, flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', color: theme.textMuted }}>
+                    {item.image_url ? (
+                      <img src={item.image_url} alt={item.product_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
+                    ) : <span style={{ fontSize: '14px', color: '#4a4a6a' }}>--</span>}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <h4 style={{ margin: '0 0 4px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.product_name}</h4>
                     <p style={{ color: theme.textMuted, margin: 0, fontSize: '14px' }}>
                       ${parseFloat(item.price).toFixed(2)} • Stock: {item.current_stock}
                     </p>
@@ -2371,7 +2486,7 @@ function MachineDetails() {
                 </div>
                 <button
                   onClick={() => handleRemoveProduct(item.id)}
-                  style={{ background: 'none', border: 'none', color: theme.danger, cursor: 'pointer', fontSize: '18px' }}
+                  style={{ background: 'none', border: 'none', color: theme.danger, cursor: 'pointer', fontSize: '18px', padding: '8px', minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                   aria-label={`Remove ${item.product_name} from machine`}
                   title="Remove product"
                 >
@@ -2414,7 +2529,7 @@ function MachineDetails() {
               </div>
 
               {/* Expiration Date */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
                 <span style={{ fontSize: '13px', color: theme.textSecondary, fontWeight: '600' }}>Expires:</span>
                 <input
                   type="date"
@@ -2495,6 +2610,7 @@ function MachineDetails() {
             disabled={submittingVisit}
             style={{
               ...styles.button,
+              width: '100%',
               marginTop: '16px',
               backgroundColor: theme.success,
               opacity: submittingVisit ? 0.7 : 1,
@@ -2504,7 +2620,7 @@ function MachineDetails() {
           >
             {submittingVisit
               ? 'Submitting...'
-              : `Submit Visit (${Object.keys(pendingMarks).length}/${inventory.length} products marked)`}
+              : `Submit Visit (${Object.keys(pendingMarks).length}/${inventory.length} marked)`}
           </button>
         )}
 
@@ -2516,7 +2632,7 @@ function MachineDetails() {
 
         {/* Redistribute Buttons */}
         {inventory.length > 0 && (
-          <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: '12px', marginTop: '16px' }}>
             <button
               onClick={() => { setShowRedistribution(!showRedistribution); setAutoDistSuggestions(null); }}
               style={{ ...styles.button, backgroundColor: showRedistribution ? theme.warning : theme.primary }}
@@ -2586,7 +2702,7 @@ function MachineDetails() {
             Move products to machines where they perform better to reduce spoilage.
           </p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? '16px' : '24px' }}>
             {/* Source Products (Left Panel) */}
             <div>
               <h3 style={{ marginBottom: '12px', color: theme.textSecondary }}>Select Product to Move</h3>
@@ -2686,7 +2802,7 @@ function MachineDetails() {
               {selectedProductForRedist && selectedTargetMachine && (
                 <div style={{ ...styles.card, marginTop: '16px' }}>
                   <h4 style={{ margin: '0 0 12px 0' }}>Transfer Details</h4>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
                     <label style={{ color: theme.textSecondary }}>Quantity:</label>
                     <input
                       type="number"
@@ -2726,13 +2842,13 @@ function MachineDetails() {
               <h3 style={{ margin: '0 0 12px 0' }}>Queued Transfers ({redistQueue.length})</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
                 {redistQueue.map(move => (
-                  <div key={move.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: theme.surfaceHover, borderRadius: '8px' }}>
-                    <span>
+                  <div key={move.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', gap: '8px', backgroundColor: theme.surfaceHover, borderRadius: '8px' }}>
+                    <span style={{ wordBreak: 'break-word', minWidth: 0 }}>
                       <strong>{move.quantity}x</strong> {move.product.product_name} → {move.targetMachine.machine_name}
                     </span>
                     <button
                       onClick={() => handleRemoveFromQueue(move.id)}
-                      style={{ background: 'none', border: 'none', color: theme.danger, cursor: 'pointer', fontSize: '18px', padding: '0 4px' }}
+                      style={{ background: 'none', border: 'none', color: theme.danger, cursor: 'pointer', fontSize: '18px', padding: '8px', minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                     >
                       ×
                     </button>
@@ -2794,7 +2910,7 @@ function MachineDetails() {
 
       {/* Swipe Poll Section */}
       <div style={{ marginBottom: '32px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
           <h2 style={{ margin: 0 }}>Customer Swipe Polls</h2>
           <button onClick={() => setShowPollForm(!showPollForm)} style={{ ...styles.button, ...styles.buttonSuccess }}>
             {showPollForm ? 'Cancel' : '+ Create Poll'}
@@ -2803,16 +2919,16 @@ function MachineDetails() {
 
         {showPollForm && <SwipePollForm machineId={id} onSuccess={() => { setShowPollForm(false); loadMachineData(true); }} />}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: '16px' }}>
           {polls.map(poll => (
             <div key={poll.id} style={styles.card}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '8px' }}>
-                <h4 style={{ margin: 0 }}>{poll.poll_question}</h4>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                <h4 style={{ margin: 0, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '8px' }}>{poll.poll_question}</h4>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', flexShrink: 0 }}>
                   {/* Poll Type Badge */}
                   <span style={{
                     padding: '4px 10px',
-                    borderRadius: '12px',
+                    borderRadius: '8px',
                     fontSize: '11px',
                     backgroundColor: poll.pollType === 'discovery' ? theme.secondary + '20' : theme.primary + '20',
                     color: poll.pollType === 'discovery' ? theme.secondary : theme.primary
@@ -2823,7 +2939,7 @@ function MachineDetails() {
                   {poll.isAutoGenerated && (
                     <span style={{
                       padding: '4px 10px',
-                      borderRadius: '12px',
+                      borderRadius: '8px',
                       fontSize: '11px',
                       backgroundColor: theme.warning + '20',
                       color: theme.warning
@@ -2834,7 +2950,7 @@ function MachineDetails() {
                   {/* Active Status */}
                   <span style={{
                     padding: '4px 10px',
-                    borderRadius: '12px',
+                    borderRadius: '8px',
                     fontSize: '12px',
                     backgroundColor: poll.is_active ? theme.success + '20' : theme.surfaceHover,
                     color: poll.is_active ? theme.success : theme.textMuted
@@ -2904,7 +3020,7 @@ function MachineDetails() {
       <div style={styles.card}>
         <h2 style={{ margin: '0 0 16px 0' }}>Machine QR Code</h2>
         {qrCodeDataUrl ? (
-          <div style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '24px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
             <img src={qrCodeDataUrl} alt="QR Code" style={{ width: '150px', borderRadius: '8px' }} />
             <div>
               <p style={{ color: theme.textSecondary, margin: '0 0 16px 0' }}>
@@ -3039,12 +3155,12 @@ function SwipePollForm({ machineId, onSuccess }) {
         {pollType === 'discovery' ? 'New Products to Test (add images!)' : 'Products to Vote On'}
       </label>
       {products.map((product, index) => (
-        <div key={index} style={{ display: 'flex', gap: '12px', marginBottom: '12px', alignItems: 'center' }}>
+        <div key={index} style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px', alignItems: 'center' }}>
           <input
             type="text"
             value={product.name}
             onChange={(e) => handleProductChange(index, 'name', e.target.value)}
-            style={{ ...styles.input, flex: 2 }}
+            style={{ ...styles.input, flex: '2 1 140px' }}
             placeholder="Product name"
             required
           />
@@ -3052,7 +3168,7 @@ function SwipePollForm({ machineId, onSuccess }) {
             type="url"
             value={product.imageUrl}
             onChange={(e) => handleProductChange(index, 'imageUrl', e.target.value)}
-            style={{ ...styles.input, flex: 2 }}
+            style={{ ...styles.input, flex: '2 1 140px' }}
             placeholder={pollType === 'discovery' ? 'Image URL (recommended)' : 'Image URL (optional)'}
           />
           {products.length > 2 && (
@@ -3152,7 +3268,7 @@ function PollResults() {
               <h3 style={{ margin: 0 }}>{option.product_name}</h3>
               <span style={{
                 padding: '4px 12px',
-                borderRadius: '12px',
+                borderRadius: '8px',
                 fontSize: '14px',
                 fontWeight: 'bold',
                 backgroundColor: theme.primary + '20',
@@ -3187,6 +3303,7 @@ function PollSummary() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const toast = useToast();
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const loadList = async () => {
@@ -3239,7 +3356,7 @@ function PollSummary() {
 
       {products.length === 0 ? (
         <div style={{ ...styles.card, textAlign: 'center', padding: '48px' }}>
-          <p style={{ fontSize: '36px', margin: '0 0 16px 0' }}>🛒</p>
+          <p style={{ fontSize: '24px', margin: '0 0 16px 0', color: theme.textMuted }}>No items</p>
           <p style={{ fontWeight: '600', fontSize: '16px', margin: '0 0 8px 0' }}>No products qualify yet</p>
           <p style={{ color: theme.textSecondary }}>Keep marking products as doing good or bad on your machines. Products need at least 5 performance marks with at least 1 good mark to show up here.</p>
         </div>
@@ -3251,16 +3368,16 @@ function PollSummary() {
           <div style={{ marginBottom: '40px' }}>
             {products.map((product, i) => (
               <div key={product.product_name} style={{ ...styles.card, marginBottom: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <div>
-                    <span style={{ fontWeight: '600', fontSize: '16px' }}>{i + 1}. {product.product_name}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', marginBottom: '8px', gap: '8px' }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <span style={{ fontWeight: '600', fontSize: isMobile ? '15px' : '16px', wordBreak: 'break-word' }}>{i + 1}. {product.product_name}</span>
                     {product.category && (
-                      <span style={{ color: theme.textMuted, fontSize: '12px', marginLeft: '10px', backgroundColor: theme.surfaceHover, padding: '2px 8px', borderRadius: '10px' }}>
+                      <span style={{ color: theme.textMuted, fontSize: '12px', marginLeft: '10px', backgroundColor: theme.surfaceHover, padding: '2px 8px', borderRadius: '10px', display: 'inline-block', marginTop: isMobile ? '4px' : undefined }}>
                         {product.category}
                       </span>
                     )}
                   </div>
-                  <span style={{ fontWeight: 'bold', fontSize: '16px', color: theme.success }}>
+                  <span style={{ fontWeight: 'bold', fontSize: '16px', color: theme.success, flexShrink: 0, whiteSpace: 'nowrap' }}>
                     {product.total_yes} good
                   </span>
                 </div>
@@ -3268,7 +3385,7 @@ function PollSummary() {
                   <div style={{
                     height: '100%',
                     width: `${product.approval_rate}%`,
-                    backgroundColor: Number(product.approval_rate) >= 70 ? theme.success : theme.warning || '#f59e0b',
+                    backgroundColor: Number(product.approval_rate) >= 70 ? theme.success : theme.warning,
                     borderRadius: '5px',
                     transition: 'width 0.3s ease'
                   }} />
@@ -3282,13 +3399,13 @@ function PollSummary() {
 
           {/* Copyable Preview */}
           <div style={styles.card}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'center', marginBottom: '16px', flexDirection: isMobile ? 'column' : 'row', gap: '12px' }}>
               <h2 style={{ margin: 0 }}>Shopping List</h2>
-              <button onClick={handleCopy} style={{ ...styles.button, ...styles.buttonSuccess }}>
+              <button onClick={handleCopy} style={{ ...styles.button, ...styles.buttonSuccess, flexShrink: 0 }}>
                 {copied ? 'Copied!' : 'Copy Shopping List'}
               </button>
             </div>
-            <div style={{ backgroundColor: theme.bg, borderRadius: '8px', padding: '16px', fontFamily: 'monospace', fontSize: '14px', lineHeight: '1.8', whiteSpace: 'pre-wrap' }}>
+            <div style={{ backgroundColor: theme.bg, borderRadius: '8px', padding: isMobile ? '12px' : '16px', fontFamily: 'monospace', fontSize: isMobile ? '12px' : '14px', lineHeight: '1.8', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
               {buildShoppingText()}
             </div>
           </div>
@@ -3378,7 +3495,7 @@ function AnalyticsDashboard() {
               border: activeTab === tab ? 'none' : `1px solid ${theme.border}`,
             }}
           >
-            {tab === 'overview' ? '📊 Overview' : '🏆 Engagement Rankings'}
+            {tab === 'overview' ? 'Overview' : 'Engagement Rankings'}
           </button>
         ))}
       </div>
@@ -3536,7 +3653,7 @@ function AnalyticsDashboard() {
                     </Link>
                     {machine.location && (
                       <div style={{ color: theme.textMuted, fontSize: '13px', marginTop: '2px' }}>
-                        📍 {machine.location}
+                        {machine.location}
                       </div>
                     )}
                   </div>
@@ -3601,6 +3718,7 @@ function TopProducts() {
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const toast = useToast();
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     loadTopProducts();
@@ -3646,10 +3764,10 @@ function TopProducts() {
         ← Back to Dashboard
       </Link>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'flex-start', gap: '12px', marginBottom: '24px' }}>
         <div>
-          <h1 style={{ margin: '0 0 8px 0' }}>Top 50 Products</h1>
-          <p style={{ color: theme.textSecondary, margin: 0 }}>
+          <h1 style={{ margin: '0 0 8px 0', fontSize: isMobile ? '22px' : undefined }}>Top 50 Products</h1>
+          <p style={{ color: theme.textSecondary, margin: 0, fontSize: isMobile ? '13px' : undefined }}>
             Most popular products across all vendors based on weighted performance ratings
           </p>
           <p style={{ color: theme.textMuted, margin: '4px 0 0 0', fontSize: '13px' }}>
@@ -3663,8 +3781,10 @@ function TopProducts() {
             ...styles.buttonSecondary,
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'center',
             gap: '8px',
             opacity: refreshing ? 0.6 : 1,
+            flexShrink: 0,
           }}
         >
           {refreshing ? 'Refreshing...' : 'Refresh'}
@@ -3682,43 +3802,46 @@ function TopProducts() {
               ...styles.card,
               display: 'flex',
               alignItems: 'center',
-              gap: '20px',
-              padding: '16px 20px'
+              gap: isMobile ? '10px' : '20px',
+              padding: isMobile ? '12px' : '16px 20px'
             }}>
               <div style={{
-                width: '40px',
-                height: '40px',
+                width: isMobile ? '28px' : '40px',
+                height: isMobile ? '28px' : '40px',
                 borderRadius: '50%',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontWeight: 'bold',
-                fontSize: '16px',
+                fontSize: isMobile ? '12px' : '16px',
+                flexShrink: 0,
                 backgroundColor: index < 3 ? theme.warning + '20' : theme.surfaceHover,
                 color: index < 3 ? theme.warning : theme.textSecondary
               }}>
                 {product.rank_position || index + 1}
               </div>
 
-              {product.image_url && (
-                <img src={product.image_url} alt={product.product_name} style={{ width: '50px', height: '50px', borderRadius: '8px', objectFit: 'cover' }} />
-              )}
+              <div style={{ width: isMobile ? '40px' : '50px', height: isMobile ? '40px' : '50px', borderRadius: '8px', background: theme.border, flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', color: theme.textMuted }}>
+                {product.image_url ? (
+                  <img src={product.image_url} alt={product.product_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
+                ) : <span style={{ fontSize: '14px', color: '#4a4a6a' }}>--</span>}
+              </div>
 
-              <div style={{ flex: 1 }}>
-                <h4 style={{ margin: 0 }}>{product.product_name}</h4>
-                <p style={{ color: theme.textMuted, margin: 0, fontSize: '14px' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h4 style={{ margin: 0, fontSize: isMobile ? '14px' : undefined, wordBreak: 'break-word' }}>{product.product_name}</h4>
+                <p style={{ color: theme.textMuted, margin: 0, fontSize: isMobile ? '12px' : '14px' }}>
                   {product.unique_vendors > 0
                     ? `Used by ${product.unique_vendors} vendor${product.unique_vendors !== 1 ? 's' : ''}`
                     : ''}
                 </p>
               </div>
 
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '24px', fontWeight: 'bold', color: theme.success }}>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ fontSize: isMobile ? '18px' : '24px', fontWeight: 'bold', color: theme.success }}>
                   {product.yes_count}
                 </div>
-                <div style={{ color: theme.textMuted, fontSize: '12px' }}>
-                  performing ({product.performance_percentage || 0}%)
+                <div style={{ color: theme.textMuted, fontSize: isMobile ? '10px' : '12px' }}>
+                  {isMobile ? `${product.performance_percentage || 0}%` : `performing (${product.performance_percentage || 0}%)`}
                 </div>
               </div>
             </div>
@@ -3740,6 +3863,7 @@ function RoutePlan() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const location = useLocation();
   const toast = useToast();
+  const isMobile = useIsMobile();
 
   // Reload data whenever the page is navigated to (using location.key)
   useEffect(() => {
@@ -3793,18 +3917,18 @@ function RoutePlan() {
 
       {/* Header */}
       <div style={{ ...styles.card, marginBottom: '24px', background: `linear-gradient(135deg, ${theme.primary}20, ${theme.surface})` }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'start', marginBottom: '16px', gap: '12px' }}>
           <div>
-            <h1 style={{ margin: '0 0 8px 0' }}>📋 Route Plan</h1>
-            <p style={{ color: theme.textSecondary, margin: 0 }}>
+            <h1 style={{ margin: '0 0 8px 0', fontSize: isMobile ? '22px' : undefined }}>Route Plan</h1>
+            <p style={{ color: theme.textSecondary, margin: 0, fontSize: isMobile ? '13px' : undefined }}>
               Optimized redistribution plan based on product performance across all machines
             </p>
           </div>
-          <div style={{ textAlign: 'right' }}>
+          <div style={{ textAlign: isMobile ? 'left' : 'right', display: 'flex', flexDirection: isMobile ? 'row' : 'column', alignItems: 'center', gap: '8px' }}>
             <button
               onClick={loadRoutePlan}
               disabled={loading}
-              style={{ ...styles.button, ...styles.buttonSecondary, marginBottom: '8px' }}
+              style={{ ...styles.button, ...styles.buttonSecondary, flexShrink: 0 }}
             >
               {loading ? 'Refreshing...' : '↻ Refresh'}
             </button>
@@ -3858,7 +3982,7 @@ function RoutePlan() {
             onClick={() => setSelectedStop(selectedStop === stop.machineId ? null : stop.machineId)}
           >
             {/* Stop Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px', gap: '8px' }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
                   <span style={{
@@ -3875,10 +3999,10 @@ function RoutePlan() {
                   }}>
                     {index + 1}
                   </span>
-                  <h3 style={{ margin: 0 }}>{stop.machineName}</h3>
+                  <h3 style={{ margin: 0, wordBreak: 'break-word' }}>{stop.machineName}</h3>
                 </div>
                 <p style={{ color: theme.textMuted, margin: '0 0 0 40px', fontSize: '14px' }}>
-                  📍 {stop.location}
+                  {stop.location}
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '16px' }}>
@@ -3922,8 +4046,8 @@ function RoutePlan() {
                           }}
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                            <div>
-                              <p style={{ margin: 0, fontWeight: '600' }}>{item.productName}</p>
+                            <div style={{ minWidth: 0 }}>
+                              <p style={{ margin: 0, fontWeight: '600', wordBreak: 'break-word' }}>{item.productName}</p>
                               <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: theme.textMuted }}>
                                 Stock: {item.currentStock} units available
                               </p>
@@ -4256,7 +4380,7 @@ function CustomerSwipe({ initData }) {
               <div style={{
                 backgroundColor: theme.success + '20',
                 border: `1px solid ${theme.success}`,
-                borderRadius: '12px',
+                borderRadius: '8px',
                 padding: '16px',
                 color: theme.success,
                 fontWeight: '500'
@@ -4487,7 +4611,7 @@ function CustomerSwipe({ initData }) {
                 flexDirection: 'column',
                 gap: '8px',
               }}>
-                <span style={{ fontSize: 'clamp(24px, 6vw, 32px)', opacity: 0.4 }}>📦</span>
+                <span style={{ fontSize: 'clamp(20px, 5vw, 28px)', opacity: 0.3, color: theme.textMuted }}>No items</span>
                 <span style={{ color: theme.textMuted, fontSize: '14px', padding: '0 20px', textAlign: 'center' }}>
                   {currentProduct?.product_name}
                 </span>
@@ -4506,7 +4630,7 @@ function CustomerSwipe({ initData }) {
               flexDirection: 'column',
               gap: '8px',
             }}>
-              <span style={{ fontSize: 'clamp(24px, 6vw, 32px)', opacity: 0.4 }}>📦</span>
+              <span style={{ fontSize: 'clamp(20px, 5vw, 28px)', opacity: 0.3, color: theme.textMuted }}>No items</span>
               <span style={{ color: theme.textMuted, fontSize: '14px', padding: '0 20px', textAlign: 'center' }}>
                 {currentProduct?.product_name}
               </span>
@@ -4626,7 +4750,7 @@ function Suggestions() {
     const c = colors[status] || colors.pending;
     return {
       padding: '4px 12px',
-      borderRadius: '12px',
+      borderRadius: '8px',
       fontSize: '12px',
       fontWeight: '600',
       backgroundColor: c.bg,
@@ -4651,7 +4775,7 @@ function Suggestions() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div>
-          <h1 style={{ margin: '0 0 8px 0' }}>💡 Product Suggestions</h1>
+          <h1 style={{ margin: '0 0 8px 0' }}>Product Suggestions</h1>
           <p style={{ color: theme.textSecondary, margin: 0 }}>
             Customer suggestions from QR code polls
           </p>
@@ -4739,6 +4863,7 @@ function InventoryManagement() {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('stock');
+  const isMobile = useIsMobile();
   const [summary, setSummary] = useState({});
   // Purchase form
   const [purchaseProductId, setPurchaseProductId] = useState('');
@@ -4857,9 +4982,9 @@ function InventoryManagement() {
 
   const getStatusBadge = (status) => {
     const colors = {
-      ok: { bg: '#22c55e20', color: theme.success, label: 'OK' },
-      low: { bg: '#f59e0b20', color: theme.warning, label: 'Low' },
-      out: { bg: '#ef444420', color: theme.danger, label: 'Out' },
+      ok: { bg: `${theme.success}20`, color: theme.success, label: 'OK' },
+      low: { bg: `${theme.warning}20`, color: theme.warning, label: 'Low' },
+      out: { bg: `${theme.danger}20`, color: theme.danger, label: 'Out' },
     };
     const c = colors[status] || colors.ok;
     return (
@@ -4869,13 +4994,13 @@ function InventoryManagement() {
 
   const getTxnTypeBadge = (type) => {
     const colors = {
-      purchase: { bg: '#22c55e20', color: theme.success, label: 'Purchase' },
-      dispersal_to_machine: { bg: '#8b5cf620', color: theme.primary, label: 'To Machine' },
+      purchase: { bg: `${theme.success}20`, color: theme.success, label: 'Purchase' },
+      dispersal_to_machine: { bg: `${theme.primary}20`, color: theme.primary, label: 'To Machine' },
       direct_to_machine: { bg: '#06b6d420', color: theme.secondary, label: 'Direct' },
-      sold_from_machine: { bg: '#ef444420', color: theme.danger, label: 'Sold' },
-      adjustment: { bg: '#f59e0b20', color: theme.warning, label: 'Adjustment' },
+      sold_from_machine: { bg: `${theme.danger}20`, color: theme.danger, label: 'Sold' },
+      adjustment: { bg: `${theme.warning}20`, color: theme.warning, label: 'Adjustment' },
     };
-    const c = colors[type] || { bg: '#71717a20', color: theme.textMuted, label: type };
+    const c = colors[type] || { bg: `${theme.textMuted}20`, color: theme.textMuted, label: type };
     return (
       <span style={{ ...styles.badge, backgroundColor: c.bg, color: c.color }}>{c.label}</span>
     );
@@ -4897,7 +5022,7 @@ function InventoryManagement() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h1 style={{ margin: '0 0 8px 0' }}>📦 Central Inventory</h1>
+          <h1 style={{ margin: '0 0 8px 0' }}>Central Inventory</h1>
           <p style={{ color: theme.textSecondary, margin: 0 }}>
             Track stock levels and purchases
           </p>
@@ -4908,35 +5033,35 @@ function InventoryManagement() {
       </div>
 
       {/* Summary Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '12px', marginBottom: '24px' }}>
-        <div style={{ ...styles.card, textAlign: 'center' }}>
-          <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{summary.totalOnHand || 0}</div>
-          <div style={{ color: theme.textSecondary, fontSize: '13px' }}>On Hand</div>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(auto-fit, minmax(100px, 1fr))', gap: isMobile ? '8px' : '12px', marginBottom: '24px' }}>
+        <div style={{ ...styles.card, textAlign: 'center', padding: isMobile ? '10px 6px' : undefined }}>
+          <div style={{ fontSize: isMobile ? '18px' : '24px', fontWeight: 'bold' }}>{summary.totalOnHand || 0}</div>
+          <div style={{ color: theme.textSecondary, fontSize: isMobile ? '11px' : '13px' }}>On Hand</div>
         </div>
-        <div style={{ ...styles.card, textAlign: 'center', borderColor: theme.primary }}>
-          <div style={{ fontSize: '24px', fontWeight: 'bold', color: theme.primary }}>{summary.totalInField || 0}</div>
-          <div style={{ color: theme.textSecondary, fontSize: '13px' }}>In Machines</div>
+        <div style={{ ...styles.card, textAlign: 'center', borderColor: theme.primary, padding: isMobile ? '10px 6px' : undefined }}>
+          <div style={{ fontSize: isMobile ? '18px' : '24px', fontWeight: 'bold', color: theme.primary }}>{summary.totalInField || 0}</div>
+          <div style={{ color: theme.textSecondary, fontSize: isMobile ? '11px' : '13px' }}>In Machines</div>
         </div>
-        <div style={{ ...styles.card, textAlign: 'center' }}>
-          <div style={{ fontSize: '24px', fontWeight: 'bold' }}>{summary.totalAll || 0}</div>
-          <div style={{ color: theme.textSecondary, fontSize: '13px' }}>Total</div>
+        <div style={{ ...styles.card, textAlign: 'center', padding: isMobile ? '10px 6px' : undefined }}>
+          <div style={{ fontSize: isMobile ? '18px' : '24px', fontWeight: 'bold' }}>{summary.totalAll || 0}</div>
+          <div style={{ color: theme.textSecondary, fontSize: isMobile ? '11px' : '13px' }}>Total</div>
         </div>
-        <div style={{ ...styles.card, textAlign: 'center', borderColor: theme.success }}>
-          <div style={{ fontSize: '24px', fontWeight: 'bold', color: theme.success }}>{summary.healthy || 0}</div>
-          <div style={{ color: theme.textSecondary, fontSize: '13px' }}>Healthy</div>
+        <div style={{ ...styles.card, textAlign: 'center', borderColor: theme.success, padding: isMobile ? '10px 6px' : undefined }}>
+          <div style={{ fontSize: isMobile ? '18px' : '24px', fontWeight: 'bold', color: theme.success }}>{summary.healthy || 0}</div>
+          <div style={{ color: theme.textSecondary, fontSize: isMobile ? '11px' : '13px' }}>Healthy</div>
         </div>
-        <div style={{ ...styles.card, textAlign: 'center', borderColor: theme.warning }}>
-          <div style={{ fontSize: '24px', fontWeight: 'bold', color: theme.warning }}>{summary.lowStock || 0}</div>
-          <div style={{ color: theme.textSecondary, fontSize: '13px' }}>Low Stock</div>
+        <div style={{ ...styles.card, textAlign: 'center', borderColor: theme.warning, padding: isMobile ? '10px 6px' : undefined }}>
+          <div style={{ fontSize: isMobile ? '18px' : '24px', fontWeight: 'bold', color: theme.warning }}>{summary.lowStock || 0}</div>
+          <div style={{ color: theme.textSecondary, fontSize: isMobile ? '11px' : '13px' }}>Low Stock</div>
         </div>
-        <div style={{ ...styles.card, textAlign: 'center', borderColor: theme.danger }}>
-          <div style={{ fontSize: '24px', fontWeight: 'bold', color: theme.danger }}>{summary.outOfStock || 0}</div>
-          <div style={{ color: theme.textSecondary, fontSize: '13px' }}>Out of Stock</div>
+        <div style={{ ...styles.card, textAlign: 'center', borderColor: theme.danger, padding: isMobile ? '10px 6px' : undefined }}>
+          <div style={{ fontSize: isMobile ? '18px' : '24px', fontWeight: 'bold', color: theme.danger }}>{summary.outOfStock || 0}</div>
+          <div style={{ color: theme.textSecondary, fontSize: isMobile ? '11px' : '13px' }}>Out of Stock</div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: `1px solid ${theme.border}`, paddingBottom: '8px' }}>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: `1px solid ${theme.border}`, paddingBottom: '8px', overflowX: isMobile ? 'auto' : undefined, WebkitOverflowScrolling: 'touch' }}>
         {[
           { key: 'stock', label: 'Stock Levels' },
           { key: 'purchase', label: 'Log Purchase' },
@@ -4951,6 +5076,9 @@ function InventoryManagement() {
               border: activeTab === tab.key ? 'none' : `1px solid ${theme.border}`,
               fontSize: '14px',
               padding: '8px 16px',
+              minHeight: '44px',
+              flexShrink: 0,
+              whiteSpace: 'nowrap',
             }}
           >
             {tab.label}
@@ -4976,41 +5104,44 @@ function InventoryManagement() {
                 <div key={item.id} style={{
                   ...styles.card,
                   display: 'flex',
-                  alignItems: 'center',
+                  flexDirection: isMobile ? 'column' : 'row',
+                  alignItems: isMobile ? 'stretch' : 'center',
                   justifyContent: 'space-between',
                   gap: '12px',
-                  flexWrap: 'wrap',
+                  flexWrap: isMobile ? 'nowrap' : 'wrap',
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: '200px' }}>
-                    {item.image_url && (
-                      <img src={item.image_url} alt="" style={{ width: '36px', height: '36px', borderRadius: '6px', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
-                    )}
-                    <div>
-                      <div style={{ fontWeight: '600' }}>{item.product_name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: isMobile ? undefined : 1, minWidth: isMobile ? undefined : '200px' }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '6px', background: theme.border, flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', color: theme.textMuted }}>
+                      {item.image_url ? (
+                        <img src={item.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
+                      ) : <span style={{ fontSize: '14px', color: '#4a4a6a' }}>--</span>}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: '600', wordBreak: 'break-word' }}>{item.product_name}</div>
                       {item.category && <div style={{ color: theme.textMuted, fontSize: '12px' }}>{item.category}</div>}
                     </div>
+                    {getStatusBadge(item.stock_status)}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '16px', justifyContent: isMobile ? 'space-between' : undefined, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
                     <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{item.quantity_on_hand}</div>
+                      <div style={{ fontSize: isMobile ? '15px' : '18px', fontWeight: 'bold' }}>{item.quantity_on_hand}</div>
                       <div style={{ color: theme.textMuted, fontSize: '11px' }}>On Hand</div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: '18px', fontWeight: 'bold', color: theme.primary }}>{item.in_field || 0}</div>
-                      <div style={{ color: theme.textMuted, fontSize: '11px' }}>In Machines</div>
+                      <div style={{ fontSize: isMobile ? '15px' : '18px', fontWeight: 'bold', color: theme.primary }}>{item.in_field || 0}</div>
+                      <div style={{ color: theme.textMuted, fontSize: '11px' }}>In Field</div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{item.total_stock || 0}</div>
+                      <div style={{ fontSize: isMobile ? '15px' : '18px', fontWeight: 'bold' }}>{item.total_stock || 0}</div>
                       <div style={{ color: theme.textMuted, fontSize: '11px' }}>Total</div>
                     </div>
-                    {getStatusBadge(item.stock_status)}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <span style={{ color: theme.textMuted, fontSize: '12px' }}>Reorder at:</span>
+                      <span style={{ color: theme.textMuted, fontSize: '12px' }}>Reorder:</span>
                       <input
                         type="number"
                         defaultValue={item.reorder_threshold}
                         min="0"
-                        style={{ ...styles.input, width: '60px', padding: '4px 8px', fontSize: '14px', textAlign: 'center' }}
+                        style={{ ...styles.input, width: '50px', padding: '4px 6px', fontSize: '14px', textAlign: 'center', minHeight: '36px' }}
                         onBlur={(e) => {
                           const newVal = parseInt(e.target.value);
                           if (newVal !== item.reorder_threshold && !isNaN(newVal)) {
@@ -5024,7 +5155,7 @@ function InventoryManagement() {
                     </div>
                     <button
                       onClick={() => { setAdjustProduct(item); setAdjustQuantity(''); setAdjustNotes(''); }}
-                      style={{ ...styles.button, ...styles.buttonSecondary, fontSize: '12px', padding: '6px 10px' }}
+                      style={{ ...styles.button, ...styles.buttonSecondary, fontSize: '12px', padding: '8px 12px', minHeight: '44px' }}
                     >
                       Adjust
                     </button>
@@ -5166,7 +5297,7 @@ function InventoryManagement() {
               {transactions.map(txn => (
                 <div key={txn.id} style={{ ...styles.card, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
                   <div style={{ flex: 1, minWidth: '150px' }}>
-                    <div style={{ fontWeight: '600', marginBottom: '4px' }}>{txn.product_name}</div>
+                    <div style={{ fontWeight: '600', marginBottom: '4px', wordBreak: 'break-word' }}>{txn.product_name}</div>
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                       {getTxnTypeBadge(txn.transaction_type)}
                       {txn.machine_name && (
@@ -5224,6 +5355,7 @@ function ExpiringProducts() {
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState(14);
   const toast = useToast();
+  const isMobile = useIsMobile();
 
   const loadExpiringProducts = useCallback(async () => {
     try {
@@ -5279,19 +5411,19 @@ function ExpiringProducts() {
         ← Back to Dashboard
       </Link>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'center', marginBottom: '24px', gap: '12px' }}>
         <div>
-          <h1 style={{ margin: '0 0 8px 0' }}>⏰ Expiring Products</h1>
-          <p style={{ color: theme.textSecondary, margin: 0 }}>
+          <h1 style={{ margin: '0 0 8px 0', fontSize: isMobile ? '22px' : undefined }}>Expiring Products</h1>
+          <p style={{ color: theme.textSecondary, margin: 0, fontSize: isMobile ? '13px' : undefined }}>
             Products expiring within {days} days across all machines
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <label style={{ color: theme.textSecondary }}>Show next:</label>
+          <label style={{ color: theme.textSecondary, fontSize: isMobile ? '13px' : undefined }}>Show next:</label>
           <select
             value={days}
             onChange={(e) => setDays(parseInt(e.target.value))}
-            style={{ ...styles.input, width: 'auto', padding: '8px 16px' }}
+            style={{ ...styles.input, width: 'auto', padding: '8px 16px', minHeight: '44px' }}
           >
             <option value="7">7 days</option>
             <option value="14">14 days</option>
@@ -5320,17 +5452,17 @@ function ExpiringProducts() {
                 ...styles.card,
                 borderLeft: `4px solid ${urgencyColor}`
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                  <div>
-                    <h3 style={{ margin: '0 0 8px 0' }}>{product.product_name}</h3>
+                <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'start', gap: isMobile ? '12px' : '8px' }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <h3 style={{ margin: '0 0 8px 0', wordBreak: 'break-word', fontSize: isMobile ? '16px' : undefined }}>{product.product_name}</h3>
                     <p style={{ color: theme.textMuted, margin: '0 0 4px 0', fontSize: '14px' }}>
-                      📍 {product.machine_name} • Stock: {product.current_stock}
+                      {product.machine_name} • Stock: {product.current_stock}
                     </p>
                     <p style={{ color: urgencyColor, margin: 0, fontSize: '14px', fontWeight: '600' }}>
                       {daysLeft <= 0 ? 'EXPIRED' : `Expires in ${daysLeft} days`} ({new Date(product.expiration_date).toLocaleDateString()})
                     </p>
                   </div>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
                     <input
                       type="date"
                       defaultValue={product.expiration_date?.split('T')[0]}
@@ -5339,11 +5471,11 @@ function ExpiringProducts() {
                           handleUpdateExpiration(product.machine_id, product.inventory_id, e.target.value);
                         }
                       }}
-                      style={{ ...styles.input, width: 'auto', padding: '8px' }}
+                      style={{ ...styles.input, width: 'auto', padding: '8px', minHeight: '44px' }}
                     />
                     <Link
                       to={`/vendor/machines/${product.machine_id}`}
-                      style={{ ...styles.button, textDecoration: 'none', padding: '8px 16px', fontSize: '14px' }}
+                      style={{ ...styles.button, textDecoration: 'none', padding: '8px 16px', fontSize: '14px', minHeight: '44px', display: 'flex', alignItems: 'center' }}
                     >
                       View Machine
                     </Link>
@@ -5357,7 +5489,7 @@ function ExpiringProducts() {
 
       {/* Tips */}
       <div style={{ ...styles.card, marginTop: '24px', backgroundColor: theme.warning + '10', borderLeft: `4px solid ${theme.warning}` }}>
-        <h3 style={{ margin: '0 0 8px 0', color: theme.warning }}>💡 Tips for Managing Expiring Products</h3>
+        <h3 style={{ margin: '0 0 8px 0', color: theme.warning }}>Tips for Managing Expiring Products</h3>
         <ul style={{ margin: 0, paddingLeft: '20px', color: theme.textSecondary, lineHeight: '1.8' }}>
           <li>Move expiring products to higher-traffic machines</li>
           <li>Consider promotional pricing for products nearing expiration</li>
@@ -5394,7 +5526,7 @@ function Home() {
             padding: '16px 32px',
             fontSize: '16px'
           }}>
-            📊 Vendor Portal
+            Vendor Portal
           </Link>
         </div>
 
@@ -5484,8 +5616,9 @@ function GoogleAuthCallback() {
     return (
       <div style={{ ...styles.page, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ width: 40, height: 40, border: '3px solid #e5e7eb', borderTopColor: '#3b82f6', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
-          <p style={{ color: theme.textSecondary }}>Completing Google sign-in...</p>
+          <div style={{ width: 40, height: 40, border: `3px solid ${theme.border}`, borderTopColor: theme.primary, borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
+          <p style={{ color: theme.text, fontWeight: '600', marginBottom: '8px' }}>Signing you in...</p>
+          <p style={{ color: theme.textMuted, fontSize: '13px' }}>Connecting to server, this may take a moment</p>
         </div>
       </div>
     );
@@ -5649,16 +5782,16 @@ function App() {
             <Route path="/vendor/reset-password" element={<ResetPassword />} />
 
             {/* Vendor Protected Routes */}
-            <Route path="/vendor/dashboard" element={<ProtectedRoute><VendorDashboard /></ProtectedRoute>} />
-            <Route path="/vendor/machines/:id" element={<ProtectedRoute><MachineDetails /></ProtectedRoute>} />
-            <Route path="/vendor/polls/:pollId/results" element={<ProtectedRoute><PollResults /></ProtectedRoute>} />
-            <Route path="/vendor/poll-summary" element={<ProtectedRoute><PollSummary /></ProtectedRoute>} />
-            <Route path="/vendor/top-products" element={<ProtectedRoute><TopProducts /></ProtectedRoute>} />
-            <Route path="/vendor/analytics" element={<ProtectedRoute><AnalyticsDashboard /></ProtectedRoute>} />
-            <Route path="/vendor/route-plan" element={<ProtectedRoute><RoutePlan /></ProtectedRoute>} />
-            <Route path="/vendor/suggestions" element={<ProtectedRoute><Suggestions /></ProtectedRoute>} />
-            <Route path="/vendor/expiring" element={<ProtectedRoute><ExpiringProducts /></ProtectedRoute>} />
-            <Route path="/vendor/inventory" element={<ProtectedRoute><InventoryManagement /></ProtectedRoute>} />
+            <Route path="/vendor/dashboard" element={<ProtectedRoute><VendorLayout><VendorDashboard /></VendorLayout></ProtectedRoute>} />
+            <Route path="/vendor/machines/:id" element={<ProtectedRoute><VendorLayout><MachineDetails /></VendorLayout></ProtectedRoute>} />
+            <Route path="/vendor/polls/:pollId/results" element={<ProtectedRoute><VendorLayout><PollResults /></VendorLayout></ProtectedRoute>} />
+            <Route path="/vendor/poll-summary" element={<ProtectedRoute><VendorLayout><PollSummary /></VendorLayout></ProtectedRoute>} />
+            <Route path="/vendor/top-products" element={<ProtectedRoute><VendorLayout><TopProducts /></VendorLayout></ProtectedRoute>} />
+            <Route path="/vendor/analytics" element={<ProtectedRoute><VendorLayout><AnalyticsDashboard /></VendorLayout></ProtectedRoute>} />
+            <Route path="/vendor/route-plan" element={<ProtectedRoute><VendorLayout><RoutePlan /></VendorLayout></ProtectedRoute>} />
+            <Route path="/vendor/suggestions" element={<ProtectedRoute><VendorLayout><Suggestions /></VendorLayout></ProtectedRoute>} />
+            <Route path="/vendor/expiring" element={<ProtectedRoute><VendorLayout><ExpiringProducts /></VendorLayout></ProtectedRoute>} />
+            <Route path="/vendor/inventory" element={<ProtectedRoute><VendorLayout><InventoryManagement /></VendorLayout></ProtectedRoute>} />
 
             {/* Customer Routes (Anonymous) */}
             <Route path="/customer/machine/:qr_token" element={<CustomerMachine />} />

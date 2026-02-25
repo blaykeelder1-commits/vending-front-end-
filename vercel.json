@@ -5,6 +5,7 @@
     }
   },
   "rewrites": [
+    { "source": "/api/keep-alive", "destination": "/api/keep-alive" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
