@@ -204,82 +204,6 @@ const styles = {
   },
 };
 
-// ============================================
-// MOBILE NAVIGATION COMPONENT
-// ============================================
-
-function MobileNav({ isOpen, onClose, onLogout }) {
-  const location = useLocation();
-
-  // Close nav when route changes
-  useEffect(() => {
-    onClose();
-  }, [location.pathname, onClose]);
-
-  // Prevent body scroll when nav is open
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [isOpen]);
-
-  const navLinks = [
-    { to: '/vendor/dashboard', label: 'Dashboard' },
-    { to: '/vendor/analytics', label: 'Analytics' },
-    { to: '/vendor/route-plan', label: 'Route Plan' },
-    { to: '/vendor/suggestions', label: 'Suggestions' },
-    { to: '/vendor/inventory', label: 'Inventory' },
-    { to: '/vendor/expiring', label: 'Expiring Products' },
-    { to: '/vendor/poll-summary', label: 'Shopping List' },
-    { to: '/vendor/top-products', label: 'Top 50 Products' },
-  ];
-
-  return (
-    <div
-      className={`mobile-nav ${isOpen ? 'open' : ''}`}
-      role="navigation"
-      aria-hidden={!isOpen}
-    >
-      <div className="mobile-nav-links">
-        {navLinks.map(link => (
-          <Link
-            key={link.to}
-            to={link.to}
-            className={location.pathname === link.to ? 'active' : ''}
-            onClick={onClose}
-          >
-            {link.label}
-          </Link>
-        ))}
-        <hr style={{ border: 'none', borderTop: `1px solid ${theme.border}`, margin: '16px 0' }} />
-        <button onClick={() => { onLogout(); onClose(); }}>
-          Sign Out
-        </button>
-      </div>
-    </div>
-  );
-}
-
-const MobileMenuButton = React.memo(function MobileMenuButton({ isOpen, onClick }) {
-  return (
-    <button
-      className={`mobile-menu-btn ${isOpen ? 'open' : ''}`}
-      onClick={onClick}
-      aria-label={isOpen ? 'Close menu' : 'Open menu'}
-      aria-expanded={isOpen}
-    >
-      <span></span>
-      <span></span>
-      <span></span>
-    </button>
-  );
-});
-
 // Custom hook for responsive detection
 function useIsMobile(breakpoint = 768) {
   const [isMobile, setIsMobile] = useState(
@@ -303,7 +227,6 @@ function useIsMobile(breakpoint = 768) {
 // ============================================
 
 function VendorLayout({ children }) {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const isMobile = useIsMobile();
   const location = useLocation();
   const navigate = useNavigate();
@@ -313,11 +236,6 @@ function VendorLayout({ children }) {
     startKeepAlive();
     return () => stopKeepAlive();
   }, []);
-
-  // Close menu on route change
-  useEffect(() => {
-    setIsMobileMenuOpen(false);
-  }, [location.pathname]);
 
   const handleLogout = () => {
     stopKeepAlive();
