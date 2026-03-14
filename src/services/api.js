@@ -243,6 +243,12 @@ export const vendorAPI = {
   // Machine Notes
   updateMachineNotes: (machineId, notes) =>
     api.put(`/vendor/machines/${machineId}/notes`, { notes }),
+  addMachineNote: (machineId, content) =>
+    api.post(`/vendor/machines/${machineId}/notes`, { content }),
+  getMachineNotes: (machineId) =>
+    api.get(`/vendor/machines/${machineId}/notes`),
+  deleteMachineNote: (machineId, noteId) =>
+    api.delete(`/vendor/machines/${machineId}/notes/${noteId}`),
 
   // Product Suggestions
   getSuggestions: (params = {}) => {
@@ -281,6 +287,13 @@ export const vendorAPI = {
   getMachineRealtimeStats: (machineId) => api.get(`/analytics/machines/${machineId}/realtime`),
   getEngagementRankings: () => api.get('/analytics/engagement'),
   getDailyAnalytics: (days = 30) => api.get(`/analytics/daily?days=${days}`),
+
+  // Referral system
+  getReferralCode: () => api.get('/vendor/referral-code'),
+  getReferrals: () => api.get('/vendor/referrals'),
+
+  // Shared reports
+  shareReport: (data) => api.post('/vendor/reports/share', data),
 };
 
 // Customer API (Anonymous)
@@ -313,6 +326,22 @@ export const customerAPI = {
 // Public API (no auth)
 export const publicAPI = {
   resolveMachineQR: (qr_token) => api.get(`/auth/public/machines/by-qr/${qr_token}`),
+  getBlogPosts: () => api.get('/public/blog'),
+  getBlogPost: (slug) => api.get(`/public/blog/${slug}`),
+  getSharedReport: (token) => api.get(`/public/report/${token}`),
+  captureLead: (data) => api.post('/public/leads/capture', data),
+  getEmbedPoll: (machineId) => api.get(`/public/embed/poll/${machineId}`),
+  resolveReferral: (code) => api.get(`/public/ref/${code}`),
+};
+
+// Check if backend is reachable and healthy
+export const checkBackendHealth = async () => {
+  try {
+    const res = await api.get('/health');
+    return res.status >= 200 && res.status < 300;
+  } catch {
+    return false;
+  }
 };
 
 // Wake up backend on app init (Render cold start mitigation)
