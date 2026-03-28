@@ -59,6 +59,34 @@ const staticPosts = [
     published_at: '2026-03-27',
     category: 'Growth',
   },
+  {
+    slug: 'smart-cooler-vs-traditional-vending',
+    title: 'Smart Cooler vs Traditional Vending Machine: Which Makes More Money?',
+    meta_description: 'Compare smart coolers, traditional combo machines, and micro markets. Setup costs, revenue, maintenance, and which format makes the most money for operators.',
+    published_at: '2026-03-27',
+    category: 'Comparison',
+  },
+  {
+    slug: 'vending-machine-expiration-tracking',
+    title: 'Vending Machine Expiration Tracking: How to Stop Losing $200/Month',
+    meta_description: 'Most vending operators lose $150-300/month to spoilage without realizing it. Learn expiration tracking strategies, FIFO methods, and how to eliminate waste.',
+    published_at: '2026-03-27',
+    category: 'Operations',
+  },
+  {
+    slug: 'best-vending-machine-software-2026',
+    title: 'Best Vending Machine Software in 2026: Honest Comparison',
+    meta_description: 'Honest comparison of the best vending machine management software in 2026. IDDI, Cantaloupe, VendSoft, Parlevel, 365 Retail Markets, and Haha Vending reviewed.',
+    published_at: '2026-03-27',
+    category: 'Reviews',
+  },
+  {
+    slug: 'customer-polling-vending-machines',
+    title: 'How Customer Polling Changed What I Stock (Real Data)',
+    meta_description: 'Real case study: how QR-based customer polling changed my vending product mix, increased revenue 27%, and revealed surprises about what customers actually want.',
+    published_at: '2026-03-27',
+    category: 'Growth',
+  },
 ];
 
 function BlogList() {

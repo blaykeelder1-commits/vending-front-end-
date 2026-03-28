@@ -21,6 +21,8 @@ const BlogPost = React.lazy(() => import('./pages/BlogPost'));
 const ComparisonPage = React.lazy(() => import('./pages/ComparisonPage'));
 const SharedReport = React.lazy(() => import('./pages/SharedReport'));
 const PricingPage = React.lazy(() => import('./pages/PricingPage'));
+const PartnerLanding = React.lazy(() => import('./pages/PartnerLanding'));
+const AdLanding = React.lazy(() => import('./pages/AdLanding'));
 
 // Auth pages
 const VendorLoginModule = React.lazy(() => import('./pages/VendorLogin'));
@@ -109,6 +111,8 @@ function App() {
                 <Route path="/pricing" element={<PricingPage />} />
                 <Route path="/vs/:competitor" element={<ComparisonPage />} />
                 <Route path="/report/:token" element={<SharedReport />} />
+                <Route path="/partner/:slug" element={<PartnerLanding />} />
+                <Route path="/get-started" element={<AdLanding />} />
 
                 {/* ===== AUTH PAGES ===== */}
                 <Route path="/auth/google/callback" element={<GoogleAuthCallback />} />
