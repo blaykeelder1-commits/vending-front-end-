@@ -5,12 +5,26 @@ Allow: /
 # Sitemap location
 Sitemap: https://vending-front-end.vercel.app/sitemap.xml
 
-# Disallow private routes (these require authentication)
-Disallow: /vendor/
+# Allow public pages
+Allow: /$
+Allow: /for-vendors
+Allow: /vending-machine-profit-calculator
+Allow: /how-to-start-a-vending-machine-business
+Allow: /blog
+Allow: /blog/
+Allow: /vs/
+Allow: /vendor/login
+
+# Disallow private/authenticated routes
+Disallow: /vendor/dashboard
+Disallow: /vendor/machines
+Disallow: /vendor/inventory
+Disallow: /vendor/analytics
+Disallow: /vendor/route-plan
+Disallow: /vendor/top-products
+Disallow: /vendor/poll-summary
+Disallow: /vendor/suggestions
+Disallow: /vendor/expiring
 Disallow: /customer/machine/
 Disallow: /api/
-
-# Allow crawlers to access public pages
-Allow: /login
-Allow: /register
-Allow: /$
+Disallow: /auth/

@@ -17,163 +17,22 @@ code {
     monospace;
 }
 
-/* ===== MOBILE RESPONSIVE STYLES ===== */
-
 /* Prevent horizontal overflow */
 #root {
   overflow-x: hidden;
   width: 100%;
 }
 
-/* Mobile-first responsive adjustments */
-@media screen and (max-width: 768px) {
-  /* Reduce page padding on mobile */
-  #root > div {
-    padding: 12px !important;
-  }
-
-  /* Scale down headings */
-  h1 {
-    font-size: 24px !important;
-    line-height: 1.2 !important;
-  }
-
-  h2 {
-    font-size: 20px !important;
-  }
-
-  h3 {
-    font-size: 16px !important;
-  }
-
-  /* Fix header flex layouts - stack vertically on mobile */
-  #root > div > div:first-child {
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    gap: 16px !important;
-  }
-
-  /* Button containers - wrap and fill width */
-  #root > div > div:first-child > div:last-child {
-    width: 100% !important;
-    display: grid !important;
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 8px !important;
-  }
-
-  /* Make all buttons in header responsive */
-  #root > div > div:first-child > div:last-child > * {
-    padding: 10px 12px !important;
-    font-size: 13px !important;
-    text-align: center !important;
-    justify-content: center !important;
-  }
-
-  /* Card grids - single column on mobile */
-  div[style*="grid-template-columns"] {
-    grid-template-columns: 1fr !important;
-  }
-
-  /* Cards - reduce padding */
-  div[style*="border-radius: 12px"][style*="padding: 20px"] {
-    padding: 14px !important;
-  }
-
-  /* Inputs - ensure they don't overflow */
-  input, select, textarea {
-    max-width: 100% !important;
-    font-size: 16px !important; /* Prevents iOS zoom */
-  }
-
-  /* Tables - make scrollable */
-  table {
-    display: block;
-    overflow-x: auto;
-    white-space: nowrap;
-  }
-
-  /* Flex containers with gap - reduce gap on mobile */
-  div[style*="gap: 20px"] {
-    gap: 12px !important;
-  }
-
-  div[style*="gap: 24px"] {
-    gap: 14px !important;
-  }
-
-  /* Modal/form widths */
-  div[style*="maxWidth: 400px"],
-  div[style*="max-width: 400px"] {
-    max-width: 100% !important;
-    margin: 0 !important;
-  }
-
-  div[style*="maxWidth: 600px"],
-  div[style*="max-width: 600px"] {
-    max-width: 100% !important;
-  }
-
-  /* Stat boxes in dashboard */
-  div[style*="text-align: center"][style*="flex: 1"] {
-    min-width: 60px !important;
-    padding: 8px !important;
-  }
-
-  /* Action buttons row */
-  div[style*="gap: 8px"][style*="flex-wrap: wrap"] {
-    width: 100% !important;
-  }
-
-  div[style*="gap: 8px"][style*="flex-wrap: wrap"] > button,
-  div[style*="gap: 8px"][style*="flex-wrap: wrap"] > a {
-    flex: 1 1 calc(50% - 4px) !important;
-    min-width: 0 !important;
-    padding: 8px 10px !important;
-    font-size: 12px !important;
-  }
-}
-
-/* Extra small screens (phones in portrait) */
-@media screen and (max-width: 400px) {
-  #root > div {
-    padding: 8px !important;
-  }
-
-  h1 {
-    font-size: 20px !important;
-  }
-
-  h2 {
-    font-size: 18px !important;
-  }
-
-  /* Stack header buttons in single column on very small screens */
-  #root > div > div:first-child > div:last-child {
-    grid-template-columns: 1fr !important;
-  }
-
-  /* Reduce button padding further */
-  button, a[style*="padding"] {
-    padding: 8px 12px !important;
-  }
-
-  /* Smaller font for secondary text */
-  p {
-    font-size: 14px !important;
-  }
-}
-
-/* Fix for iOS safe areas */
+/* iOS safe area support */
 @supports (padding: env(safe-area-inset-bottom)) {
-  #root > div {
-    padding-bottom: calc(12px + env(safe-area-inset-bottom)) !important;
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
   }
 }
 
 /* Ensure touch targets are large enough (44px minimum) */
 @media (pointer: coarse) {
   button,
-  a[style*="padding"],
   input[type="checkbox"],
   input[type="radio"] {
     min-height: 44px;

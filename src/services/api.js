@@ -1,9 +1,40 @@
 import axios from 'axios';
+import { getCachedResponse, setCachedResponse, addToMutationQueue, getPendingMutations, removeMutation, clearVendorCache } from './offlineDb';
+
+// Paths eligible for offline caching (GET responses)
+const CACHEABLE_PATHS = [
+  '/vendor/machines',
+  '/vendor/products',
+  '/vendor/inventory',
+  '/vendor/expiring-products',
+  '/vendor/redistribution-plan',
+];
+
+// Check if a URL path matches cacheable patterns (includes parameterized paths like /vendor/machines/:id/inventory)
+function isCacheablePath(url) {
+  if (CACHEABLE_PATHS.some(p => url.startsWith(p))) return true;
+  if (/^\/vendor\/machines\/\d+\/inventory/.test(url)) return true;
+  if (/^\/vendor\/machines\/\d+$/.test(url)) return true;
+  return false;
+}
+
+// Paths eligible for offline mutation queueing (POST/PUT when offline)
+const QUEUABLE_MUTATION_PATHS = [
+  '/performance-commit',
+  '/inventory/',
+  '/notes',
+];
+
+function isQueuableMutation(method, url) {
+  if (method !== 'post' && method !== 'put') return false;
+  return QUEUABLE_MUTATION_PATHS.some(p => url.includes(p));
+}
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 const api = axios.create({
   baseURL: API_URL,
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -57,12 +88,45 @@ if (tokenChannel) {
 
 // Response interceptor for error handling and automatic token refresh
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Cache GET responses for cacheable paths
+    const url = response.config?.url || '';
+    if (response.config?.method === 'get' && isCacheablePath(url)) {
+      setCachedResponse(url, response.data).catch(() => {});
+    }
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
 
     // Handle network errors (no response)
     if (!error.response) {
+      const config = error.config || {};
+      const url = config.url || '';
+      const method = (config.method || '').toLowerCase();
+
+      // Try serving cached GET response when offline
+      if (method === 'get' && isCacheablePath(url)) {
+        try {
+          const cached = await getCachedResponse(url);
+          if (cached) {
+            return { data: cached.data, status: 200, _fromCache: true, config };
+          }
+        } catch {
+          // IndexedDB not available
+        }
+      }
+
+      // Queue eligible mutations when offline
+      if (isQueuableMutation(method, url)) {
+        try {
+          await addToMutationQueue({ method, url, body: config.data });
+          return { data: { success: true, _queued: true }, status: 200, config };
+        } catch {
+          // Fall through to error
+        }
+      }
+
       console.error('Network Error:', error.message);
       error.userMessage = 'Unable to connect to server. Please check your internet connection.';
       return Promise.reject(error);
@@ -263,6 +327,9 @@ export const vendorAPI = {
   updateExpirationDate: (machineId, inventoryId, expirationDate) =>
     api.put(`/vendor/machines/${machineId}/inventory/${inventoryId}/expiration`, { expirationDate }),
 
+  // Visit Restock (batch reconcile + restock)
+  visitRestock: (machineId, data) => api.post(`/vendor/machines/${machineId}/visit-restock`, data),
+
   // Visit History / Memory
   getChangesSinceVisit: (machineId) =>
     api.get(`/vendor/machines/${machineId}/changes-since-visit`),
@@ -294,6 +361,28 @@ export const vendorAPI = {
 
   // Shared reports
   shareReport: (data) => api.post('/vendor/reports/share', data),
+
+  // Discount system
+  getMachineDiscounts: (machineId) => api.get(`/discounts/machines/${machineId}`),
+  createDiscount: (machineId, data) => api.post(`/discounts/machines/${machineId}`, data),
+  updateDiscount: (discountId, data) => api.put(`/discounts/${discountId}`, data),
+  deleteDiscount: (discountId) => api.delete(`/discounts/${discountId}`),
+  getRebateBalance: () => api.get('/discounts/balance'),
+  loadRebateBalance: (amount) => api.post('/discounts/balance/load', { amount }),
+  getRedemptions: (params) => api.get('/discounts/redemptions', { params }),
+  approveRedemption: (id) => api.put(`/discounts/redemptions/${id}/approve`),
+  rejectRedemption: (id, reason) => api.put(`/discounts/redemptions/${id}/reject`, { reason }),
+  getDiscountAnalytics: () => api.get('/discounts/analytics'),
+};
+
+// Discount Customer API (no auth)
+export const discountCustomerAPI = {
+  getMachineDiscounts: (machineId) => api.get(`/discounts/customer/machine/${machineId}`),
+  register: (data) => api.post('/discounts/customer/register', data),
+  linkPayout: (data) => api.post('/discounts/customer/link-payout', data),
+  claim: (data) => api.post('/discounts/customer/claim', data),
+  submitProof: (data) => api.post('/discounts/customer/submit-proof', data),
+  getHistory: (customerId) => api.get(`/discounts/customer/history?customerId=${customerId}`),
 };
 
 // Customer API (Anonymous)
@@ -369,4 +458,45 @@ export const stopKeepAlive = () => {
 // Fire immediately on module load
 wakeBackend();
 
+// Sync pending offline mutations when coming back online
+export async function syncPendingMutations() {
+  try {
+    const mutations = await getPendingMutations();
+    if (mutations.length === 0) return { synced: 0 };
+
+    let synced = 0;
+    for (const mutation of mutations) {
+      try {
+        await api({
+          method: mutation.method,
+          url: mutation.url,
+          data: mutation.body ? JSON.parse(mutation.body) : undefined,
+        });
+        await removeMutation(mutation.id);
+        synced++;
+      } catch (err) {
+        // Stop on auth errors — user needs to re-login
+        if (err.response?.status === 401) break;
+        // Skip other errors but keep in queue for retry
+        console.error('Sync failed for mutation:', mutation.url, err.message);
+      }
+    }
+    return { synced, total: mutations.length };
+  } catch {
+    return { synced: 0 };
+  }
+}
+
+// Auto-sync when coming back online
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    syncPendingMutations().then(result => {
+      if (result.synced > 0) {
+        console.log(`Synced ${result.synced} offline changes`);
+      }
+    });
+  });
+}
+
 export default api;
+export { clearVendorCache };

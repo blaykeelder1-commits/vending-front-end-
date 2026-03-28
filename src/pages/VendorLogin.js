@@ -1,7 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { authAPI, checkBackendHealth } from '../services/api';
-import { theme, styles } from '../shared/theme';
+import { theme, styles, useIsMobile } from '../shared/theme';
+
+// Spinner keyframes injected once
+const spinnerStyleId = 'iddi-spinner-keyframes';
+if (typeof document !== 'undefined' && !document.getElementById(spinnerStyleId)) {
+  const styleEl = document.createElement('style');
+  styleEl.id = spinnerStyleId;
+  styleEl.textContent = `@keyframes iddi-spin { to { transform: rotate(360deg); } }`;
+  document.head.appendChild(styleEl);
+}
 
 function VendorLogin() {
   const [isLogin, setIsLogin] = useState(true);
@@ -18,18 +27,46 @@ function VendorLogin() {
   const [backendReady, setBackendReady] = useState(false);
   const navigate = useNavigate();
   const googleButtonRef = useRef(null);
+  const isMobile = useIsMobile();
+
+  // Login card styles — premium feel with breathing room
+  const loginCardStyle = {
+    ...styles.card,
+    width: '100%',
+    maxWidth: '400px',
+    margin: isMobile ? '0 auto' : '0 auto',
+    padding: isMobile ? '24px 20px' : '32px',
+    boxShadow: '0 8px 32px rgba(124, 109, 240, 0.08), 0 2px 8px rgba(0, 0, 0, 0.3)',
+    borderRadius: '12px',
+  };
+
+  const pageStyle = {
+    ...styles.page,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: isMobile ? '16px' : '16px',
+  };
 
   // Poll backend health until it responds (Render cold start gate)
+  // Max 15 attempts (30s) — after that, show the form anyway so users
+  // aren't stuck on a loading screen (the login call itself will error clearly)
   useEffect(() => {
     let cancelled = false;
+    const MAX_RETRIES = 15;
     const poll = async () => {
-      while (!cancelled) {
+      let attempts = 0;
+      while (!cancelled && attempts < MAX_RETRIES) {
         const ok = await checkBackendHealth();
         if (ok && !cancelled) {
           setBackendReady(true);
           return;
         }
+        attempts++;
         await new Promise(r => setTimeout(r, 2000));
+      }
+      if (!cancelled) {
+        setBackendReady(true);
       }
     };
     poll();
@@ -209,8 +246,8 @@ function VendorLogin() {
   // Show verification needed message
   if (needsVerification) {
     return (
-      <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ ...styles.card, width: '100%', maxWidth: '400px', textAlign: 'center' }}>
+      <div style={pageStyle}>
+        <div style={{ ...loginCardStyle, textAlign: 'center' }}>
           <div style={{ fontSize: '48px', marginBottom: '16px' }}>&#128231;</div>
           <h1 style={{ margin: '0 0 8px 0', fontSize: '24px' }}>Email Not Verified</h1>
           <p style={{ color: theme.textSecondary, margin: '0 0 24px 0' }}>
@@ -218,13 +255,13 @@ function VendorLogin() {
           </p>
           <button
             onClick={handleGoToVerification}
-            style={{ ...styles.button, width: '100%' }}
+            style={{ ...styles.button, width: '100%', minHeight: '48px' }}
           >
             Go to Verification
           </button>
           <button
             onClick={() => setNeedsVerification(false)}
-            style={{ ...styles.button, ...styles.buttonSecondary, width: '100%', marginTop: '12px' }}
+            style={{ ...styles.button, ...styles.buttonSecondary, width: '100%', marginTop: '12px', minHeight: '48px' }}
           >
             Back to Login
           </button>
@@ -234,8 +271,8 @@ function VendorLogin() {
   }
 
   return (
-    <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ ...styles.card, width: '100%', maxWidth: '400px' }}>
+    <div style={pageStyle}>
+      <div style={loginCardStyle}>
         <h1 style={{ margin: '0 0 8px 0', fontSize: '28px' }}>
           {isLogin ? 'Welcome Back' : 'Create Account'}
         </h1>
@@ -245,16 +282,31 @@ function VendorLogin() {
 
         {!backendReady && (
           <div style={{
-            padding: '12px 16px',
+            padding: '14px 16px',
             backgroundColor: theme.warning + '20',
             border: `1px solid ${theme.warning}`,
             borderRadius: '8px',
-            marginBottom: '16px',
+            marginBottom: '20px',
             textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '6px',
           }}>
-            <p style={{ color: theme.warning, fontSize: '14px', fontWeight: '600', margin: '0 0 4px 0' }}>
-              Connecting to server...
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{
+                width: '16px',
+                height: '16px',
+                border: `2px solid ${theme.warning}`,
+                borderTopColor: 'transparent',
+                borderRadius: '50%',
+                animation: 'iddi-spin 0.8s linear infinite',
+                flexShrink: 0,
+              }} />
+              <p style={{ color: theme.warning, fontSize: '14px', fontWeight: '600', margin: 0 }}>
+                Connecting to server...
+              </p>
+            </div>
             <p style={{ color: theme.textSecondary, fontSize: '12px', margin: 0 }}>
               The server is waking up. This usually takes 15-30 seconds.
             </p>
@@ -286,7 +338,7 @@ function VendorLogin() {
               required
             />
           </div>
-          <div style={{ marginBottom: '24px' }}>
+          <div style={{ marginBottom: '16px' }}>
             <label style={styles.label}>Password</label>
             <input
               type="password"
@@ -299,20 +351,28 @@ function VendorLogin() {
           </div>
 
           {error && (
-            <div style={{ color: theme.danger, marginBottom: '16px', fontSize: '14px' }}>
+            <div style={{
+              color: theme.danger,
+              marginBottom: '16px',
+              fontSize: '14px',
+              padding: '12px',
+              backgroundColor: theme.danger + '10',
+              borderRadius: '8px',
+              border: `1px solid ${theme.danger}30`,
+            }}>
               {error}
             </div>
           )}
 
-          <button type="submit" style={{ ...styles.button, width: '100%', ...(!backendReady ? { opacity: 0.5 } : {}) }} disabled={loading || googleLoading || !backendReady}>
+          <button type="submit" style={{ ...styles.button, width: '100%', minHeight: '48px', fontSize: '15px', ...(!backendReady ? { opacity: 0.5 } : {}) }} disabled={loading || googleLoading || !backendReady}>
             {!backendReady ? 'Waiting for server...' : loading ? 'Please wait...' : isLogin ? 'Sign In' : 'Create Account'}
           </button>
         </form>
 
         {/* Divider */}
-        <div style={{ display: 'flex', alignItems: 'center', margin: '24px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', margin: '28px 0' }}>
           <div style={{ flex: 1, height: '1px', backgroundColor: theme.border }}></div>
-          <span style={{ padding: '0 16px', color: theme.textMuted, fontSize: '14px' }}>or continue with</span>
+          <span style={{ padding: '0 20px', color: theme.textMuted, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>or continue with</span>
           <div style={{ flex: 1, height: '1px', backgroundColor: theme.border }}></div>
         </div>
 
@@ -323,7 +383,7 @@ function VendorLogin() {
             backgroundColor: theme.warning + '20',
             border: `1px solid ${theme.warning}`,
             borderRadius: '8px',
-            marginBottom: '12px',
+            marginBottom: '16px',
             textAlign: 'center',
           }}>
             <p style={{ color: theme.warning, fontSize: '13px', fontWeight: '600', margin: '0 0 8px 0' }}>
@@ -343,7 +403,8 @@ function VendorLogin() {
                 });
               }}
               style={{
-                padding: '8px 20px',
+                padding: '10px 20px',
+                minHeight: '44px',
                 backgroundColor: theme.warning,
                 color: '#000',
                 border: 'none',
@@ -369,10 +430,11 @@ function VendorLogin() {
                 disabled={googleLoading}
                 style={{
                   width: '100%',
-                  padding: '10px 16px',
+                  padding: '12px 16px',
+                  minHeight: '48px',
                   backgroundColor: '#fff',
                   border: '1px solid #dadce0',
-                  borderRadius: '4px',
+                  borderRadius: '6px',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -405,7 +467,7 @@ function VendorLogin() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                borderRadius: '4px',
+                borderRadius: '6px',
               }}>
                 <span style={{ color: 'white', fontSize: '14px' }}>Signing in...</span>
               </div>
@@ -423,6 +485,7 @@ function VendorLogin() {
               ...styles.button,
               ...styles.buttonSecondary,
               width: '100%',
+              minHeight: '48px',
               opacity: 0.5,
               cursor: 'not-allowed',
               display: 'flex',
@@ -442,24 +505,50 @@ function VendorLogin() {
         )}
 
         {isLogin && (
-          <div style={{ textAlign: 'center', marginTop: '16px' }}>
-            <Link to="/vendor/forgot-password" style={{ ...styles.link, fontSize: '14px' }}>
+          <div style={{ textAlign: 'center', marginTop: '20px' }}>
+            <Link to="/vendor/forgot-password" style={{ ...styles.link, fontSize: '14px', padding: '8px', display: 'inline-block' }}>
               Forgot your password?
             </Link>
           </div>
         )}
 
-        <p style={{ textAlign: 'center', marginTop: '16px', color: theme.textSecondary }}>
+        <div style={{ textAlign: 'center', marginTop: '16px' }}>
           <button
             onClick={() => setIsLogin(!isLogin)}
-            style={{ background: 'none', border: 'none', color: theme.primary, cursor: 'pointer' }}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: theme.primary,
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: '500',
+              padding: '12px 16px',
+              minHeight: '44px',
+              borderRadius: '6px',
+              transition: 'background-color 0.2s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = theme.primary + '15'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
             {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
           </button>
-        </p>
+        </div>
 
-        <div style={{ textAlign: 'center', marginTop: '16px' }}>
-          <Link to="/" style={styles.link}>&#8592; Back to Home</Link>
+        <div style={{
+          textAlign: 'center',
+          marginTop: '20px',
+          paddingTop: '20px',
+          borderTop: `1px solid ${theme.border}`,
+        }}>
+          <Link to="/" style={{
+            ...styles.link,
+            fontSize: '14px',
+            fontWeight: '500',
+            padding: '10px 16px',
+            display: 'inline-block',
+            borderRadius: '6px',
+            transition: 'background-color 0.2s',
+          }}>&#8592; Back to Home</Link>
         </div>
       </div>
     </div>
