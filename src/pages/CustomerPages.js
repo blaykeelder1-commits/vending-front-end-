@@ -17,7 +17,9 @@ function CustomerMachine() {
         const response = await customerAPI.initSession(qr_token);
         const data = response.data.data;
 
-        localStorage.setItem('token', data.sessionToken);
+        if (data.sessionToken) {
+          localStorage.setItem('token', data.sessionToken);
+        }
         localStorage.setItem('selectedMachineId', data.machine.id.toString());
 
         // Preload product images immediately so they're cached by the time user sees them
@@ -74,7 +76,8 @@ function CustomerSwipe({ initData }) {
   const [poll, setPoll] = useState(initData.poll);
   const [products, setProducts] = useState(initData.products || []);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [completed, setCompleted] = useState(!initData.poll || (initData.products || []).length === 0);
+  const noPollAvailable = !initData.poll || (initData.products || []).length === 0;
+  const [completed, setCompleted] = useState(false);
   const [alreadyVoted, setAlreadyVoted] = useState(initData.alreadyVoted || false);
   const [loading] = useState(false); // No loading needed - data arrives via props
   const [swiping, setSwiping] = useState(null);
@@ -83,6 +86,7 @@ function CustomerSwipe({ initData }) {
   const [submittingSuggestion, setSubmittingSuggestion] = useState(false);
   const [cardEntering, setCardEntering] = useState(true);
   const cardRef = useRef(null);
+  const votingRef = useRef(false);
   const toast = useToast();
   const nextPollDate = initData.nextPollDate;
 
@@ -122,8 +126,9 @@ function CustomerSwipe({ initData }) {
   }, [currentIndex, products.length, machineId]);
 
   const handleVote = useCallback(async (voteType) => {
-    if (!poll || !products[currentIndex] || swiping) return;
+    if (!poll || !products[currentIndex] || swiping || votingRef.current) return;
 
+    votingRef.current = true;
     setSwiping(voteType);
 
     try {
@@ -137,6 +142,8 @@ function CustomerSwipe({ initData }) {
       setSwiping(null);
       setDragOffset(0);
       toast.error(err.response?.data?.message || 'Failed to vote');
+    } finally {
+      votingRef.current = false;
     }
   }, [poll, products, currentIndex, swiping, advanceCard, toast]);
 
@@ -204,6 +211,39 @@ function CustomerSwipe({ initData }) {
           </p>
           <p style={{ color: theme.textMuted, margin: 0, fontSize: '14px' }}>
             {nextPollDate ? `Next poll opens ${new Date(nextPollDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.` : 'Check back next month!'}
+          </p>
+
+          {/* Powered by IDDI */}
+          <div style={{ marginTop: '32px', paddingTop: '16px', borderTop: `1px solid ${theme.border}` }}>
+            <a
+              href={`/for-vendors?utm_source=qr&utm_medium=customer&utm_campaign=powered_by&machine=${machineId}`}
+              style={{
+                display: 'block', padding: '12px', borderRadius: '8px', textDecoration: 'none',
+                backgroundColor: theme.primary + '08', border: `1px solid ${theme.primary}20`,
+                textAlign: 'center',
+              }}
+            >
+              <span style={{ color: theme.textMuted, fontSize: '12px', display: 'block', marginBottom: '2px' }}>Powered by</span>
+              <span style={{ color: theme.primary, fontWeight: '700', fontSize: '16px' }}>IDDI</span>
+              <span style={{ color: theme.textSecondary, fontSize: '12px', display: 'block', marginTop: '2px' }}>Want this for YOUR machines? It's free →</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (noPollAvailable) {
+    return (
+      <div style={{ ...styles.page, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+        <div style={{ ...styles.card, maxWidth: '400px', width: '100%', padding: '32px 24px' }}>
+          <div style={{ fontSize: '64px', marginBottom: '16px' }}>📋</div>
+          <h2 style={{ margin: '0 0 12px 0', fontSize: '24px' }}>No Active Poll</h2>
+          <p style={{ color: theme.textSecondary, margin: '0 0 8px 0', lineHeight: '1.6' }}>
+            There's no poll running on this machine right now.
+          </p>
+          <p style={{ color: theme.textMuted, margin: 0, fontSize: '14px' }}>
+            {nextPollDate ? `Next poll opens ${new Date(nextPollDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.` : 'Check back soon!'}
           </p>
 
           {/* Powered by IDDI */}

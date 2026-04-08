@@ -23,6 +23,7 @@ const QUEUABLE_MUTATION_PATHS = [
   '/performance-commit',
   '/inventory/',
   '/notes',
+  '/customer/polls',
 ];
 
 function isQueuableMutation(method, url) {
