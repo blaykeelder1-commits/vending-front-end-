@@ -63,6 +63,9 @@ const Suggestions = React.lazy(() => import('./pages/MoreVendorPages').then(m =>
 const InventoryManagement = React.lazy(() => import('./pages/MoreVendorPages').then(m => ({ default: m.InventoryManagement })));
 const ExpiringProducts = React.lazy(() => import('./pages/MoreVendorPages').then(m => ({ default: m.ExpiringProducts })));
 
+// Subscription management
+const SubscriptionManage = React.lazy(() => import('./pages/SubscriptionManage'));
+
 // Customer wrappers
 const CustomerMachine = React.lazy(() => import('./pages/CustomerPages').then(m => ({ default: m.CustomerMachine })));
 
@@ -133,6 +136,7 @@ function App() {
                 <Route path="/vendor/expiring" element={<ProtectedRoute><VendorLayout><ExpiringProducts /></VendorLayout></ProtectedRoute>} />
                 <Route path="/vendor/inventory" element={<ProtectedRoute><VendorLayout><InventoryManagement /></VendorLayout></ProtectedRoute>} />
                 <Route path="/vendor/discounts" element={<ProtectedRoute><VendorLayout><DiscountManager /></VendorLayout></ProtectedRoute>} />
+                <Route path="/vendor/subscription" element={<ProtectedRoute><VendorLayout><SubscriptionManage /></VendorLayout></ProtectedRoute>} />
 
                 {/* ===== CUSTOMER ROUTES (QR scan flow) ===== */}
                 <Route path="/customer/machine/:qr_token" element={<CustomerMachine />} />

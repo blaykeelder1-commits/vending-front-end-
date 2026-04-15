@@ -5,6 +5,8 @@ import { theme, styles, useIsMobile } from '../shared/theme';
 import { useToast } from '../shared/toast';
 import { formatTimeAgo } from '../shared/utils';
 import QRCode from 'qrcode';
+import SubscriptionGate from '../components/SubscriptionGate';
+import { FeatureTipBanner } from '../components/FeatureTooltip';
 
 const FRONTEND_URL = process.env.REACT_APP_FRONTEND_URL || window.location.origin;
 
@@ -139,10 +141,10 @@ function VendorDashboard() {
 
   // Onboarding checklist logic
   const onboardingSteps = [
-    { id: 'machine', label: 'Add your first machine', done: machines.length > 0, action: () => setShowMachineForm(true) },
-    { id: 'products', label: 'Add at least 5 products', done: products.length >= 5, action: () => setShowProductForm(true) },
-    { id: 'qr', label: 'Download a QR code', done: machines.length > 0 && localStorage.getItem('iddi_qr_downloaded'), action: machines.length > 0 ? () => handleDownloadQR(machines[0].id) : null },
-    { id: 'referral', label: 'Share your referral link', done: referralCount > 0, action: () => { if (referralCode) { navigator.clipboard.writeText(`${window.location.origin}/ref/${referralCode}`); toast.success('Referral link copied — share it!'); } } },
+    { id: 'machine', label: 'Add your first machine', why: 'Machines are the foundation — every feature builds on this.', done: machines.length > 0, action: () => setShowMachineForm(true) },
+    { id: 'products', label: 'Add at least 5 products', why: 'More products = better data. Polls need options to compare.', done: products.length >= 5, action: () => setShowProductForm(true) },
+    { id: 'qr', label: 'Download a QR code', why: 'This is how customers engage. No QR = no votes, no data.', done: machines.length > 0 && localStorage.getItem('iddi_qr_downloaded'), action: machines.length > 0 ? () => handleDownloadQR(machines[0].id) : null },
+    { id: 'referral', label: 'Share your referral link', why: 'Refer other operators and earn rewards as they grow.', done: referralCount > 0, action: () => { if (referralCode) { navigator.clipboard.writeText(`${window.location.origin}/ref/${referralCode}`); toast.success('Referral link copied — share it!'); } } },
   ];
   const completedSteps = onboardingSteps.filter(s => s.done).length;
   const onboardingProgress = Math.round((completedSteps / onboardingSteps.length) * 100);
@@ -150,6 +152,12 @@ function VendorDashboard() {
 
   return (
     <div style={styles.page}>
+      {/* First-time tip: welcome */}
+      <FeatureTipBanner
+        id="welcome"
+        text="Welcome to IDDI! Follow the checklist below to get your first machine up and running. Each step unlocks more of the dashboard."
+      />
+
       {/* Onboarding Checklist */}
       {showOnboarding && (
         <div style={{
@@ -220,16 +228,23 @@ function VendorDashboard() {
                 }}>
                   {step.done ? '✓' : ''}
                 </div>
-                <span style={{
-                  fontSize: '14px', fontWeight: '500',
-                  color: step.done ? theme.success : theme.text,
-                  textDecoration: step.done ? 'line-through' : 'none',
-                  opacity: step.done ? 0.7 : 1,
-                }}>
-                  {step.label}
-                </span>
+                <div style={{ flex: 1 }}>
+                  <span style={{
+                    fontSize: '14px', fontWeight: '500',
+                    color: step.done ? theme.success : theme.text,
+                    textDecoration: step.done ? 'line-through' : 'none',
+                    opacity: step.done ? 0.7 : 1,
+                  }}>
+                    {step.label}
+                  </span>
+                  {!step.done && step.why && (
+                    <div style={{ fontSize: '11px', color: theme.textMuted, marginTop: '2px' }}>
+                      {step.why}
+                    </div>
+                  )}
+                </div>
                 {!step.done && step.action && (
-                  <span style={{ marginLeft: 'auto', fontSize: '12px', color: theme.primary, fontWeight: '600' }}>Start →</span>
+                  <span style={{ flexShrink: 0, fontSize: '12px', color: theme.primary, fontWeight: '600' }}>Start →</span>
                 )}
               </div>
             ))}
@@ -373,6 +388,14 @@ function VendorDashboard() {
         </div>
       )}
 
+      {/* ROI tip */}
+      {machines.length > 0 && (
+        <FeatureTipBanner
+          id="roi"
+          text="This estimates your monthly savings from IDDI's spoilage alerts and route optimization. The more machines and products you track, the more accurate it gets."
+        />
+      )}
+
       {/* ROI Savings Estimate */}
       {machines.length > 0 && (() => {
         const spoilageSaved = expiringCount * 3.50;
@@ -434,6 +457,10 @@ function VendorDashboard() {
 
       {/* Machines Section */}
       <div style={{ marginBottom: '48px' }}>
+        <FeatureTipBanner
+          id="machines"
+          text="Each machine gets its own QR code and inventory. Add a machine, then assign products to it. Customers scan the QR to vote on what they want stocked."
+        />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
           <h2 style={{ margin: 0, fontSize: '18px' }}>Vending Machines ({machines.length})</h2>
           <button onClick={() => setShowMachineForm(!showMachineForm)} style={{ ...styles.button, ...styles.buttonSuccess, borderRadius: '10px', padding: '10px 16px', fontSize: '13px' }}>
@@ -442,10 +469,12 @@ function VendorDashboard() {
         </div>
 
         {showMachineForm && (
-          <>
-            <UpgradePrompt machineCount={machines.length} />
-            <MachineForm onSuccess={() => { setShowMachineForm(false); loadData(); }} />
-          </>
+          <SubscriptionGate>
+            {(canAdd) => canAdd
+              ? <MachineForm onSuccess={() => { setShowMachineForm(false); loadData(); }} />
+              : null
+            }
+          </SubscriptionGate>
         )}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: '12px' }}>
@@ -590,6 +619,10 @@ function VendorDashboard() {
 
       {/* Products Section */}
       <div>
+        <FeatureTipBanner
+          id="products"
+          text="Your product library is shared across all machines. Add a product once, then assign it to any machine's planogram. Performance data follows each product everywhere."
+        />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
           <h2 style={{ margin: 0, fontSize: '18px' }}>Product Library ({products.length})</h2>
           <button onClick={() => setShowProductForm(!showProductForm)} style={{ ...styles.button, ...styles.buttonSuccess, borderRadius: '10px', padding: '10px 16px', fontSize: '13px' }}>

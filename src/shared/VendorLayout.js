@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { startKeepAlive, stopKeepAlive, clearVendorCache } from '../services/api';
+import { startKeepAlive, stopKeepAlive, clearVendorCache, vendorAPI } from '../services/api';
 import { theme, useIsMobile } from './theme';
 import OfflineIndicator from './OfflineIndicator';
+import HelpWidget from '../components/HelpWidget';
 
 function VendorLayout({ children }) {
   const isMobile = useIsMobile();
@@ -24,8 +25,16 @@ function VendorLayout({ children }) {
     navigate('/vendor/login');
   };
 
+  // Fetch subscription tier for badge display
+  const [tier, setTier] = useState(null);
+  useEffect(() => {
+    vendorAPI.getSubscriptionStatus()
+      .then(res => setTier(res.data?.data?.tier))
+      .catch(() => {});
+  }, []);
+
   if (!isMobile) {
-    return <><OfflineIndicator />{children}</>;
+    return <><OfflineIndicator />{children}<HelpWidget /></>;
   }
 
   const navItems = [
@@ -64,22 +73,42 @@ function VendorLayout({ children }) {
             letterSpacing: '3px',
           }}>IDDI</span>
         </div>
-        <button
-          onClick={handleLogout}
-          style={{
-            background: 'rgba(255,255,255,0.06)',
-            border: `1px solid ${theme.border}`,
-            color: theme.textSecondary,
-            fontSize: '13px',
-            padding: '6px 14px',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            minHeight: '36px',
-            transition: 'background 0.15s',
-          }}
-        >
-          Sign Out
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {tier && tier !== 'free' && (
+            <button
+              onClick={() => navigate('/vendor/subscription')}
+              style={{
+                background: `${theme.primary}20`,
+                border: 'none',
+                color: theme.primary,
+                fontSize: '11px',
+                fontWeight: '700',
+                padding: '4px 10px',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                textTransform: 'capitalize',
+              }}
+            >
+              {tier}
+            </button>
+          )}
+          <button
+            onClick={handleLogout}
+            style={{
+              background: 'rgba(255,255,255,0.06)',
+              border: `1px solid ${theme.border}`,
+              color: theme.textSecondary,
+              fontSize: '13px',
+              padding: '6px 14px',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              minHeight: '36px',
+              transition: 'background 0.15s',
+            }}
+          >
+            Sign Out
+          </button>
+        </div>
       </div>
       <OfflineIndicator />
       <div style={{ paddingTop: '64px', paddingBottom: '80px' }}>
@@ -141,6 +170,7 @@ function VendorLayout({ children }) {
           );
         })}
       </div>
+      <HelpWidget />
     </>
   );
 }

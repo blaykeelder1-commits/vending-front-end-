@@ -4,6 +4,7 @@ import { Helmet } from 'react-helmet-async';
 import { useIsMobile } from '../shared/theme';
 import LeadCapture from '../components/LeadCapture';
 import ExitIntentPopup from '../components/ExitIntentPopup';
+import InteractiveDemo from '../components/InteractiveDemo';
 
 const theme = {
   bg: '#0d0d1a',
@@ -662,6 +663,61 @@ function HomePage() {
               </div>
               <SwipeDemo isMobile={isMobile} />
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Interactive Product Tour */}
+      <section style={{
+        padding: isMobile ? '48px 16px' : '80px 24px',
+        maxWidth: '900px', margin: '0 auto',
+        borderTop: `1px solid ${theme.border}`,
+      }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+          gap: isMobile ? '32px' : '48px',
+          alignItems: 'center',
+        }}>
+          {/* Left: explanation */}
+          <div style={{ order: isMobile ? 2 : 1 }}>
+            <div style={{
+              display: 'inline-block', padding: '4px 12px', borderRadius: '12px', fontSize: '11px',
+              backgroundColor: theme.secondary + '15', color: theme.secondary, fontWeight: '600',
+              marginBottom: '16px', border: `1px solid ${theme.secondary}30`,
+              textTransform: 'uppercase', letterSpacing: '0.5px',
+            }}>
+              Interactive Tour
+            </div>
+            <h2 style={{ fontSize: isMobile ? '24px' : '32px', fontWeight: '700', marginBottom: '16px', lineHeight: '1.2' }}>
+              See the Operator Side<br />
+              <span style={{ color: theme.primary }}>Before You Sign Up</span>
+            </h2>
+            <p style={{ color: theme.textSecondary, fontSize: '15px', lineHeight: '1.7', marginBottom: '20px' }}>
+              No signup wall. No guessing what the app looks like. Walk through every feature of your
+              dashboard in 30 seconds — from adding your first machine to seeing real customer data drive
+              your decisions.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {[
+                { color: theme.success, text: 'Add machines, load products, generate QR codes' },
+                { color: theme.warning, text: 'Watch customer votes roll in and shape your inventory' },
+                { color: theme.secondary, text: 'Catch spoilage, optimize routes, grow profits' },
+              ].map((item, i) => (
+                <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <div style={{
+                    width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0,
+                    backgroundColor: item.color,
+                  }} />
+                  <span style={{ fontSize: '14px', color: theme.textSecondary }}>{item.text}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Right: interactive demo */}
+          <div style={{ order: isMobile ? 1 : 2 }}>
+            <InteractiveDemo isMobile={isMobile} />
           </div>
         </div>
       </section>

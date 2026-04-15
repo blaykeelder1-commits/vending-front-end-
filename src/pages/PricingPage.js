@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { useIsMobile } from '../shared/theme';
+import { vendorAPI } from '../services/api';
 
 const theme = {
   bg: '#0d0d1a',
@@ -195,11 +196,45 @@ function FAQItem({ question, answer }) {
 
 function PricingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(null);
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!isMobile) setMenuOpen(false);
   }, [isMobile]);
+
+  const handleTierClick = async (tierName) => {
+    const token = localStorage.getItem('token');
+    const tierKey = tierName.toLowerCase();
+
+    if (tierKey === 'free') {
+      navigate('/vendor/login');
+      return;
+    }
+
+    if (!token) {
+      // Not logged in — send to login, they'll be redirected after
+      navigate('/vendor/login');
+      return;
+    }
+
+    // Logged in — create checkout session
+    setCheckoutLoading(tierKey);
+    try {
+      const res = await vendorAPI.createCheckout(tierKey);
+      const url = res.data?.data?.checkoutUrl;
+      if (url) {
+        window.location.href = url;
+      } else {
+        navigate('/vendor/subscription');
+      }
+    } catch (err) {
+      navigate('/vendor/subscription');
+    } finally {
+      setCheckoutLoading(null);
+    }
+  };
 
   return (
     <div style={{ backgroundColor: theme.bg, color: theme.text, minHeight: '100vh', overflowX: 'hidden' }}>
@@ -441,16 +476,22 @@ function PricingPage() {
                   ))}
                 </div>
 
-                <Link to="/vendor/login" style={{
-                  display: 'block', textAlign: 'center', textDecoration: 'none',
-                  padding: '14px 20px', borderRadius: '8px', fontWeight: '600', fontSize: '15px',
-                  backgroundColor: isPro ? theme.primary : 'transparent',
-                  color: isPro ? '#fff' : theme.primary,
-                  border: isPro ? 'none' : `2px solid ${theme.primary}`,
-                  transition: 'opacity 0.2s',
-                }}>
-                  {tier.buttonText}
-                </Link>
+                <button
+                  onClick={() => handleTierClick(tier.name)}
+                  disabled={checkoutLoading === tier.name.toLowerCase()}
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'center',
+                    padding: '14px 20px', borderRadius: '8px', fontWeight: '600', fontSize: '15px',
+                    backgroundColor: isPro ? theme.primary : 'transparent',
+                    color: isPro ? '#fff' : theme.primary,
+                    border: isPro ? 'none' : `2px solid ${theme.primary}`,
+                    transition: 'opacity 0.2s',
+                    cursor: 'pointer',
+                    opacity: checkoutLoading === tier.name.toLowerCase() ? 0.7 : 1,
+                  }}
+                >
+                  {checkoutLoading === tier.name.toLowerCase() ? 'Redirecting...' : tier.buttonText}
+                </button>
               </div>
             );
           })}

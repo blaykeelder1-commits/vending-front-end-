@@ -363,6 +363,18 @@ export const vendorAPI = {
   // Shared reports
   shareReport: (data) => api.post('/vendor/reports/share', data),
 
+  // Subscription
+  getSubscriptionStatus: () => api.get('/subscription/status'),
+  createCheckout: (tier) => api.post('/subscription/checkout', { tier }),
+  changePlan: (tier) => api.post('/subscription/change-plan', { tier }),
+  cancelSubscription: () => api.post('/subscription/cancel'),
+  pauseSubscription: () => api.post('/subscription/pause'),
+  submitCancelFeedback: (data) => api.post('/subscription/cancel-feedback', data),
+
+  // Support
+  createSupportTicket: (data) => api.post('/subscription/support/ticket', data),
+  createFeatureRequest: (data) => api.post('/subscription/support/feature-request', data),
+
   // Discount system
   getMachineDiscounts: (machineId) => api.get(`/discounts/machines/${machineId}`),
   createDiscount: (machineId, data) => api.post(`/discounts/machines/${machineId}`, data),
