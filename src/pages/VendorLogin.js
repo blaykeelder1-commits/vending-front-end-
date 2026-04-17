@@ -1,16 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { authAPI, checkBackendHealth } from '../services/api';
+import { authAPI, withRetry } from '../services/api';
 import { theme, styles, useIsMobile } from '../shared/theme';
-
-// Spinner keyframes injected once
-const spinnerStyleId = 'iddi-spinner-keyframes';
-if (typeof document !== 'undefined' && !document.getElementById(spinnerStyleId)) {
-  const styleEl = document.createElement('style');
-  styleEl.id = spinnerStyleId;
-  styleEl.textContent = `@keyframes iddi-spin { to { transform: rotate(360deg); } }`;
-  document.head.appendChild(styleEl);
-}
 
 function VendorLogin() {
   const [isLogin, setIsLogin] = useState(true);
@@ -24,7 +15,6 @@ function VendorLogin() {
   const [needsVerification, setNeedsVerification] = useState(false);
   const [useRedirectFlow, setUseRedirectFlow] = useState(false);
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
-  const [backendReady, setBackendReady] = useState(false);
   const navigate = useNavigate();
   const googleButtonRef = useRef(null);
   const isMobile = useIsMobile();
@@ -48,31 +38,6 @@ function VendorLogin() {
     padding: isMobile ? '16px' : '16px',
   };
 
-  // Poll backend health until it responds (Render cold start gate)
-  // Max 15 attempts (30s) — after that, show the form anyway so users
-  // aren't stuck on a loading screen (the login call itself will error clearly)
-  useEffect(() => {
-    let cancelled = false;
-    const MAX_RETRIES = 15;
-    const poll = async () => {
-      let attempts = 0;
-      while (!cancelled && attempts < MAX_RETRIES) {
-        const ok = await checkBackendHealth();
-        if (ok && !cancelled) {
-          setBackendReady(true);
-          return;
-        }
-        attempts++;
-        await new Promise(r => setTimeout(r, 2000));
-      }
-      if (!cancelled) {
-        setBackendReady(true);
-      }
-    };
-    poll();
-    return () => { cancelled = true; };
-  }, []);
-
   // Detect in-app browsers (WebViews) that Google blocks for OAuth
   // and mobile browsers that need redirect-based OAuth
   useEffect(() => {
@@ -95,14 +60,14 @@ function VendorLogin() {
     setError('');
     setGoogleLoading(true);
     try {
-      const result = await authAPI.vendorGoogleLogin({ credential: response.credential });
+      const result = await withRetry(() => authAPI.vendorGoogleLogin({ credential: response.credential }));
       const { token, refreshToken } = result.data.data;
       localStorage.setItem('token', token);
       if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
       localStorage.setItem('userType', 'vendor');
       navigate('/vendor/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || 'Google sign-in failed');
+      setError(err.response?.data?.message || 'Google sign-in failed. Please try again.');
     } finally {
       setGoogleLoading(false);
     }
@@ -194,7 +159,7 @@ function VendorLogin() {
       const data = isLogin ? { email, password } : { email, password, fullName };
 
       if (isLogin) {
-        const response = await authAPI.vendorLogin(data);
+        const response = await withRetry(() => authAPI.vendorLogin(data));
         const { token, refreshToken } = response.data.data;
         localStorage.setItem('token', token);
         if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
@@ -202,7 +167,7 @@ function VendorLogin() {
         navigate('/vendor/dashboard');
       } else {
         // Registration - redirect to email verification
-        const response = await authAPI.vendorRegister(data);
+        const response = await withRetry(() => authAPI.vendorRegister(data));
         const { emailSent, verificationCode: code } = response.data.data;
         // Build verify URL with email; include code if email wasn't delivered
         let verifyUrl = `/vendor/verify-email?email=${encodeURIComponent(email)}`;
@@ -216,18 +181,7 @@ function VendorLogin() {
       const errorEmail = err.response?.data?.data?.email;
 
       if (!err.response) {
-        setError('Server is starting up. Please wait a moment and try again.');
-        setBackendReady(false);
-        // Re-trigger health polling
-        const repoll = async () => {
-          let ok = false;
-          while (!ok) {
-            ok = await checkBackendHealth();
-            if (!ok) await new Promise(r => setTimeout(r, 2000));
-          }
-          setBackendReady(true);
-        };
-        repoll();
+        setError('Unable to reach the server. Please check your connection and try again.');
       } else if (errorCode === 'EMAIL_NOT_VERIFIED') {
         setNeedsVerification(true);
         setEmail(errorEmail || email);
@@ -280,39 +234,6 @@ function VendorLogin() {
           {isLogin ? 'Sign in to manage your vending machines' : 'Start managing your vending business'}
         </p>
 
-        {!backendReady && (
-          <div style={{
-            padding: '14px 16px',
-            backgroundColor: theme.warning + '20',
-            border: `1px solid ${theme.warning}`,
-            borderRadius: '8px',
-            marginBottom: '20px',
-            textAlign: 'center',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '6px',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{
-                width: '16px',
-                height: '16px',
-                border: `2px solid ${theme.warning}`,
-                borderTopColor: 'transparent',
-                borderRadius: '50%',
-                animation: 'iddi-spin 0.8s linear infinite',
-                flexShrink: 0,
-              }} />
-              <p style={{ color: theme.warning, fontSize: '14px', fontWeight: '600', margin: 0 }}>
-                Connecting to server...
-              </p>
-            </div>
-            <p style={{ color: theme.textSecondary, fontSize: '12px', margin: 0 }}>
-              The server is waking up. This usually takes 15-30 seconds.
-            </p>
-          </div>
-        )}
-
         <form onSubmit={handleSubmit}>
           {!isLogin && (
             <div style={{ marginBottom: '16px' }}>
@@ -364,8 +285,8 @@ function VendorLogin() {
             </div>
           )}
 
-          <button type="submit" style={{ ...styles.button, width: '100%', minHeight: '48px', fontSize: '15px', ...(!backendReady ? { opacity: 0.5 } : {}) }} disabled={loading || googleLoading || !backendReady}>
-            {!backendReady ? 'Waiting for server...' : loading ? 'Please wait...' : isLogin ? 'Sign In' : 'Create Account'}
+          <button type="submit" style={{ ...styles.button, width: '100%', minHeight: '48px', fontSize: '15px' }} disabled={loading || googleLoading}>
+            {loading ? 'Please wait...' : isLogin ? 'Sign In' : 'Create Account'}
           </button>
         </form>
 

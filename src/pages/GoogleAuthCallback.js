@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { authAPI } from '../services/api';
+import { authAPI, withRetry } from '../services/api';
 import { theme, styles } from '../shared/theme';
 
 function GoogleAuthCallback() {
@@ -47,8 +47,9 @@ function GoogleAuthCallback() {
       sessionStorage.removeItem('google_oauth_nonce');
 
       try {
-        // Send id_token to backend (same endpoint as popup flow)
-        const result = await authAPI.vendorGoogleLogin({ credential: idToken });
+        // Send id_token to backend (same endpoint as popup flow).
+        // Retry silently across transient failures (cold boot / 502-504 / network).
+        const result = await withRetry(() => authAPI.vendorGoogleLogin({ credential: idToken }));
         const { token, refreshToken } = result.data.data;
 
         localStorage.setItem('token', token);

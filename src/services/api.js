@@ -446,6 +446,26 @@ export const checkBackendHealth = async () => {
   }
 };
 
+// Retry a request against transient failures (cold boot, 502/503/504, network/timeout).
+// Never retries 4xx auth/validation errors — those are permanent.
+export async function withRetry(fn, { attempts = 5, baseDelayMs = 1500, maxDelayMs = 6000 } = {}) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const status = err.response?.status;
+      const retriable = !err.response || status === 502 || status === 503 || status === 504 || err.code === 'ECONNABORTED';
+      if (!retriable) throw err;
+      lastErr = err;
+      if (i === attempts - 1) break;
+      const delay = Math.min(baseDelayMs * Math.pow(1.5, i), maxDelayMs);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
+}
+
 // Wake up backend on app init (Render cold start mitigation)
 export const wakeBackend = () => {
   api.get('/health').catch(() => {});
