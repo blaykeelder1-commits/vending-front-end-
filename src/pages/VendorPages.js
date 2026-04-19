@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { vendorAPI } from '../services/api';
+import { getPendingMutationCount } from '../services/offlineDb';
 import { theme, styles, useIsMobile } from '../shared/theme';
 import { useToast } from '../shared/toast';
 import { formatTimeAgo } from '../shared/utils';
@@ -3284,44 +3285,175 @@ function PollResults() {
 function PollSummary() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [pendingSync, setPendingSync] = useState(0);
+  const [undoState, setUndoState] = useState(null); // { previousResetAt, expiresAt }
+  const undoTimerRef = useRef(null);
   const toast = useToast();
   const isMobile = useIsMobile();
 
-  useEffect(() => {
-    const loadList = async () => {
-      try {
-        const response = await vendorAPI.getShoppingList();
-        setProducts(response.data.data.products || []);
-      } catch (err) {
-        toast.error('Failed to load shopping list');
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadList();
+  const loadList = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setRefreshing(true);
+    try {
+      const response = await vendorAPI.getShoppingList();
+      setProducts(response.data.data.products || []);
+    } catch (err) {
+      if (!silent) toast.error('Failed to load shopping list');
+    } finally {
+      setLoading(false);
+      if (!silent) setRefreshing(false);
+    }
   }, [toast]);
+
+  useEffect(() => {
+    loadList();
+  }, [loadList]);
+
+  const refreshPendingCount = useCallback(async () => {
+    try {
+      const count = await getPendingMutationCount();
+      setPendingSync(count);
+    } catch {
+      setPendingSync(0);
+    }
+  }, []);
+
+  // Refresh on tab focus so the list reflects marks made in other tabs / screens.
+  useEffect(() => {
+    const onFocus = () => { loadList({ silent: true }); };
+    const onVisible = () => { if (document.visibilityState === 'visible') loadList({ silent: true }); };
+    const onSynced = () => { loadList({ silent: true }); refreshPendingCount(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('iddi:marks-synced', onSynced);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('iddi:marks-synced', onSynced);
+    };
+  }, [loadList, refreshPendingCount]);
+
+  useEffect(() => {
+    refreshPendingCount();
+    const id = setInterval(refreshPendingCount, 30000);
+    return () => clearInterval(id);
+  }, [refreshPendingCount]);
 
   const buildShoppingText = () => {
     const date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     const lines = products.map((p, i) =>
-      `${i + 1}. ${p.product_name} — ${p.total_yes} good marks across ${p.machine_count} machine${Number(p.machine_count) !== 1 ? 's' : ''}`
+      `${i + 1}. ${p.product_name} — ${p.total_yes} good / ${p.total_no} bad (${p.approval_rate}%), ${p.machine_count} machine${Number(p.machine_count) !== 1 ? 's' : ''}`
     );
-    return `IDDI Shopping List (${date})\nBased on product performance across all machines\n\n${lines.join('\n')}`;
+    return `IDDI Shopping List (${date})\nRanked by approval rate\n\n${lines.join('\n')}`;
   };
 
-  const handleCopy = () => {
+  const handleCopy = async () => {
     if (products.length === 0) {
       toast.warning('No products on the shopping list yet');
       return;
     }
-    navigator.clipboard.writeText(buildShoppingText());
-    setCopied(true);
-    toast.success('Shopping list copied to clipboard');
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(buildShoppingText());
+      setCopied(true);
+      toast.success('Shopping list copied to clipboard');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error('Copy failed — your browser blocked clipboard access');
+    }
   };
 
+  const handleEmail = async () => {
+    if (products.length === 0) {
+      toast.warning('No products on the shopping list yet');
+      return;
+    }
+    setSending(true);
+    try {
+      const res = await vendorAPI.emailShoppingList();
+      const sentTo = res.data?.data?.sentTo;
+      toast.success(sentTo ? `Sent to ${sentTo}` : 'Shopping list emailed');
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Email failed — try again later';
+      toast.error(msg);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleShare = async () => {
+    if (products.length === 0) {
+      toast.warning('No products on the shopping list yet');
+      return;
+    }
+    const text = buildShoppingText();
+    const title = 'IDDI Shopping List';
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({ title, text });
+      } catch (err) {
+        if (err.name !== 'AbortError') toast.error('Share failed');
+      }
+    } else {
+      window.location.href = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(text)}`;
+    }
+  };
+
+  const clearUndoBanner = useCallback(() => {
+    setUndoState(null);
+    if (undoTimerRef.current) {
+      clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = null;
+    }
+  }, []);
+
+  const handleReset = async () => {
+    setResetting(true);
+    try {
+      const res = await vendorAPI.resetShoppingList();
+      const previousResetAt = res.data?.data?.previousResetAt || null;
+      const expiresAt = Date.now() + 10 * 60 * 1000;
+      setUndoState({ previousResetAt, expiresAt });
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      undoTimerRef.current = setTimeout(() => setUndoState(null), 10 * 60 * 1000);
+      setShowResetConfirm(false);
+      await loadList({ silent: true });
+      toast.success('Shopping list reset');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Reset failed');
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const handleUndo = async () => {
+    if (!undoState || Date.now() > undoState.expiresAt) {
+      toast.error('Undo window expired');
+      clearUndoBanner();
+      return;
+    }
+    try {
+      await vendorAPI.undoShoppingListReset(undoState.previousResetAt);
+      clearUndoBanner();
+      await loadList({ silent: true });
+      toast.success('Reset undone');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Undo failed');
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    };
+  }, []);
+
   if (loading) return <div style={styles.page}><p>Loading...</p></div>;
+
+  const canShare = typeof navigator !== 'undefined' && !!navigator.share;
 
   return (
     <div style={styles.page}>
@@ -3329,19 +3461,48 @@ function PollSummary() {
         ← Back to Dashboard
       </Link>
 
-      <h1 style={{ margin: '0 0 8px 0' }}>Shopping List</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: '12px', marginBottom: '8px', flexDirection: isMobile ? 'column' : 'row' }}>
+        <h1 style={{ margin: 0 }}>Shopping List</h1>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {pendingSync > 0 && (
+            <span style={{ fontSize: '12px', color: theme.warning, backgroundColor: theme.surfaceHover, padding: '4px 10px', borderRadius: '12px' }}>
+              {pendingSync} mark{pendingSync === 1 ? '' : 's'} pending sync
+            </span>
+          )}
+          <button
+            onClick={() => loadList()}
+            disabled={refreshing}
+            style={{ ...styles.button, ...styles.buttonSecondary, padding: '8px 14px', fontSize: '13px', opacity: refreshing ? 0.6 : 1 }}
+          >
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
+      </div>
       <p style={{ color: theme.textSecondary, margin: '0 0 12px 0' }}>
         Based on your performance marks across all machines — not poll votes
       </p>
       <p style={{ color: theme.textMuted, fontSize: '13px', margin: '0 0 32px 0' }}>
-        Products you've marked as doing good (yes) or bad (no) on each machine. Only products with 5+ marks and at least 1 good mark appear here.
+        Ranked by approval rate (highest first). Only products with 5+ marks and ≥50% approval in the last 90 days appear.
       </p>
+
+      {undoState && (
+        <div style={{ ...styles.card, backgroundColor: theme.surfaceHover, borderColor: theme.warning, marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: '12px', flexDirection: isMobile ? 'column' : 'row' }}>
+          <div>
+            <div style={{ fontWeight: 600 }}>Shopping list was reset</div>
+            <div style={{ color: theme.textMuted, fontSize: '13px' }}>You can undo within 10 minutes.</div>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={handleUndo} style={{ ...styles.button, ...styles.buttonSuccess, padding: '8px 14px' }}>Undo</button>
+            <button onClick={clearUndoBanner} style={{ ...styles.button, ...styles.buttonSecondary, padding: '8px 14px' }}>Dismiss</button>
+          </div>
+        </div>
+      )}
 
       {products.length === 0 ? (
         <div style={{ ...styles.card, textAlign: 'center', padding: '48px' }}>
           <p style={{ fontSize: '24px', margin: '0 0 16px 0', color: theme.textMuted }}>No items</p>
           <p style={{ fontWeight: '600', fontSize: '16px', margin: '0 0 8px 0' }}>No products qualify yet</p>
-          <p style={{ color: theme.textSecondary }}>Keep marking products as doing good or bad on your machines. Products need at least 5 performance marks with at least 1 good mark to show up here.</p>
+          <p style={{ color: theme.textSecondary }}>Keep marking products as doing good or bad on your machines. Products need at least 5 performance marks and ≥50% approval in the last 90 days to show up here.</p>
         </div>
       ) : (
         <>
@@ -3361,7 +3522,7 @@ function PollSummary() {
                     )}
                   </div>
                   <span style={{ fontWeight: 'bold', fontSize: '16px', color: theme.success, flexShrink: 0, whiteSpace: 'nowrap' }}>
-                    {product.total_yes} good
+                    {product.approval_rate}%
                   </span>
                 </div>
                 <div style={{ height: '10px', backgroundColor: theme.surfaceHover, borderRadius: '5px', overflow: 'hidden', marginBottom: '6px' }}>
@@ -3380,13 +3541,31 @@ function PollSummary() {
             ))}
           </div>
 
-          {/* Copyable Preview */}
+          {/* Share / Export actions */}
           <div style={styles.card}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'stretch' : 'center', marginBottom: '16px', flexDirection: isMobile ? 'column' : 'row', gap: '12px' }}>
-              <h2 style={{ margin: 0 }}>Shopping List</h2>
-              <button onClick={handleCopy} style={{ ...styles.button, ...styles.buttonSuccess, flexShrink: 0 }}>
-                {copied ? 'Copied!' : 'Copy Shopping List'}
-              </button>
+              <h2 style={{ margin: 0 }}>Forward this list</h2>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: isMobile ? 'stretch' : 'flex-end' }}>
+                <button
+                  onClick={handleEmail}
+                  disabled={sending}
+                  style={{ ...styles.button, ...styles.buttonSuccess, flexShrink: 0, opacity: sending ? 0.6 : 1 }}
+                >
+                  {sending ? 'Sending…' : 'Email to me'}
+                </button>
+                <button
+                  onClick={handleShare}
+                  style={{ ...styles.button, ...styles.buttonSecondary, flexShrink: 0 }}
+                >
+                  {canShare ? 'Share' : 'Open email app'}
+                </button>
+                <button
+                  onClick={handleCopy}
+                  style={{ ...styles.button, ...styles.buttonSecondary, flexShrink: 0 }}
+                >
+                  {copied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
             </div>
             <div style={{ backgroundColor: theme.bg, borderRadius: '8px', padding: isMobile ? '12px' : '16px', fontFamily: 'monospace', fontSize: isMobile ? '12px' : '14px', lineHeight: '1.8', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
               {buildShoppingText()}
@@ -3394,6 +3573,38 @@ function PollSummary() {
           </div>
         </>
       )}
+
+      {/* Reset (always available, even when empty, so a vendor can start fresh) */}
+      <div style={{ ...styles.card, marginTop: '24px', borderColor: theme.danger }}>
+        <h3 style={{ margin: '0 0 8px 0' }}>Reset shopping list</h3>
+        <p style={{ color: theme.textSecondary, fontSize: '14px', margin: '0 0 12px 0' }}>
+          Reframing your product lineup? A reset tells IDDI to ignore all performance marks logged before now. You can undo within 10 minutes.
+        </p>
+        {!showResetConfirm ? (
+          <button
+            onClick={() => setShowResetConfirm(true)}
+            style={{ ...styles.button, ...styles.buttonDanger, padding: '10px 16px' }}
+          >
+            Reset shopping list
+          </button>
+        ) : (
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              onClick={handleReset}
+              disabled={resetting}
+              style={{ ...styles.button, ...styles.buttonDanger, padding: '10px 16px', opacity: resetting ? 0.6 : 1 }}
+            >
+              {resetting ? 'Resetting…' : 'Yes, reset'}
+            </button>
+            <button
+              onClick={() => setShowResetConfirm(false)}
+              style={{ ...styles.button, ...styles.buttonSecondary, padding: '10px 16px' }}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
