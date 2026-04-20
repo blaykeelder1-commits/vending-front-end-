@@ -8,6 +8,7 @@ const CACHEABLE_PATHS = [
   '/vendor/inventory',
   '/vendor/expiring-products',
   '/vendor/redistribution-plan',
+  '/vendor/shopping-list',
 ];
 
 // Check if a URL path matches cacheable patterns (includes parameterized paths like /vendor/machines/:id/inventory)
@@ -291,7 +292,17 @@ export const vendorAPI = {
   getPollResults: (pollId) => api.get(`/vendor/polls/${pollId}/results`),
   getSwipeResults: (machineId) => api.get(`/vendor/machines/${machineId}/swipe-results`),
   getPollSummary: () => api.get('/vendor/poll-summary'),
-  getShoppingList: () => api.get('/vendor/shopping-list'),
+  getShoppingList: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return api.get(`/vendor/shopping-list${qs ? '?' + qs : ''}`);
+  },
+  resetShoppingList: () => api.post('/vendor/shopping-list/reset'),
+  undoShoppingListReset: (previousResetAt) =>
+    api.post('/vendor/shopping-list/undo-reset', { previousResetAt: previousResetAt || null }),
+  emailShoppingList: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return api.post(`/vendor/shopping-list/email${qs ? '?' + qs : ''}`);
+  },
 
   // Product Redistribution
   getRedistributionTargets: (machineId, productId) =>
@@ -526,6 +537,8 @@ if (typeof window !== 'undefined') {
     syncPendingMutations().then(result => {
       if (result.synced > 0) {
         console.log(`Synced ${result.synced} offline changes`);
+        // Let open screens (shopping list, inventory, etc.) know to refetch.
+        window.dispatchEvent(new CustomEvent('iddi:marks-synced', { detail: result }));
       }
     });
   });
