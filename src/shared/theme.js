@@ -1,19 +1,19 @@
 import { useState, useEffect } from 'react';
 
 export const theme = {
-  bg: '#0d0d1a',
-  surface: '#1a1a2e',
-  surfaceHover: '#252540',
-  border: '#2a2a4a',
-  primary: '#7c6df0',
-  primaryHover: '#6b5ce0',
-  secondary: '#06b6d4', // Cyan color for discovery polls
-  success: '#34d399',
-  danger: '#f87171',
+  bg: '#0a0e12',
+  surface: '#121821',
+  surfaceHover: '#1b2430',
+  border: '#27323f',
+  primary: '#0c8a7e',       // Saturated teal — approach + arousing (Mehta-Zhu / Valdez-Mehrabian)
+  primaryHover: '#0a7368',
+  secondary: '#ff9f1c',     // Complementary amber — high-contrast CTA / poll accent
+  success: '#22c55e',
+  danger: '#ef4444',        // Reserved for losses/alerts (avoidance + detail focus)
   warning: '#fbbf24',
-  text: '#f0f0f5',
-  textSecondary: '#9d9db5',
-  textMuted: '#6b6b85',
+  text: '#eef2f4',
+  textSecondary: '#9fb0bb',
+  textMuted: '#677884',
 };
 
 export const styles = {

@@ -5,7 +5,7 @@ const theme = {
   bg: '#0f0f0f',
   surface: '#1a1a1a',
   border: '#2a2a2a',
-  primary: '#8b5cf6',
+  primary: '#0c8a7e',
   danger: '#ef4444',
   text: '#ffffff',
   textSecondary: '#a1a1aa',
@@ -104,7 +104,7 @@ class ErrorBoundary extends React.Component {
 
             {process.env.NODE_ENV === 'development' && this.state.error && (
               <div style={{
-                backgroundColor: '#1a0a0a',
+                backgroundColor: '#1b1012',
                 border: `1px solid ${theme.danger}30`,
                 borderRadius: '8px',
                 padding: '12px',

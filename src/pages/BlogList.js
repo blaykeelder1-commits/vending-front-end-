@@ -4,8 +4,8 @@ import { Helmet } from 'react-helmet-async';
 import { publicAPI } from '../services/api';
 
 const theme = {
-  bg: '#0d0d1a', surface: '#1a1a2e', border: '#2a2a4a',
-  primary: '#7c6df0', text: '#f0f0f5', textSecondary: '#9d9db5', textMuted: '#6b6b85',
+  bg: '#0a0e12', surface: '#121821', border: '#27323f',
+  primary: '#0c8a7e', text: '#eef2f4', textSecondary: '#9fb0bb', textMuted: '#677884',
 };
 
 // Static blog posts (rendered client-side for now, will move to CMS later)
@@ -108,7 +108,7 @@ function BlogList() {
       </Helmet>
 
       <nav style={{
-        background: 'rgba(13, 13, 26, 0.95)', backdropFilter: 'blur(12px)',
+        background: 'rgba(10, 14, 18, 0.95)', backdropFilter: 'blur(12px)',
         borderBottom: `1px solid ${theme.border}`, padding: '12px 24px',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>

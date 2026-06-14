@@ -6,9 +6,9 @@ import LeadCapture from '../components/LeadCapture';
 import ExitIntentPopup from '../components/ExitIntentPopup';
 
 const theme = {
-  bg: '#0d0d1a', surface: '#1a1a2e', border: '#2a2a4a',
-  primary: '#7c6df0', success: '#34d399', text: '#f0f0f5',
-  textSecondary: '#9d9db5', textMuted: '#6b6b85',
+  bg: '#0a0e12', surface: '#121821', border: '#27323f',
+  primary: '#0c8a7e', success: '#22c55e', text: '#eef2f4',
+  textSecondary: '#9fb0bb', textMuted: '#677884',
 };
 
 // Static blog content (SEO-optimized articles)
@@ -80,7 +80,7 @@ Data from IDDI operators shows the top-performing product categories by location
 | Hospitals | Snacks, water, sandwiches, candy |
 | Manufacturing | Energy drinks, chips, candy, water |
 
-**Pro tip**: Use [IDDI's customer polling feature](https://vending-front-end.vercel.app/vendor/login) to let customers vote on products. Operators who use polling see **15-30% higher sell-through rates**.
+**Pro tip**: Use [IDDI's customer polling feature](https://iddisolutions.net/vendor/login) to let customers vote on products. Operators who use polling see **15-30% higher sell-through rates**.
 
 ## Step 4: Set Up Your Business
 
@@ -106,7 +106,7 @@ This is where most operators either thrive or stagnate. The operators who grow f
 3. **Listen to customers** — QR polls, suggestion boxes, customer feedback
 4. **Optimize routes** — plan restocking trips efficiently to minimize time and gas
 
-**[IDDI](https://vending-front-end.vercel.app/vendor/login) is the free platform built specifically for this.** It handles inventory tracking, customer polling via QR codes, route planning, product analytics, and more — at zero cost.
+**[IDDI](https://iddisolutions.net/vendor/login) is the free platform built specifically for this.** It handles inventory tracking, customer polling via QR codes, route planning, product analytics, and more — at zero cost.
 
 ## Step 7: Scale
 
@@ -121,7 +121,7 @@ Once your first 5 machines are profitable and running smoothly:
 
 Starting a vending machine business in 2026 is one of the most accessible passive income paths. Low startup cost, proven business model, and — with free tools like IDDI — the technology advantage that used to be reserved for enterprise operators is now available to everyone.
 
-**Ready to start?** [Create your free IDDI account](https://vending-front-end.vercel.app/vendor/login) and add your first machine in under 2 minutes.
+**Ready to start?** [Create your free IDDI account](https://iddisolutions.net/vendor/login) and add your first machine in under 2 minutes.
     `,
   },
   'best-products-to-sell-in-vending-machines': {
@@ -1681,15 +1681,15 @@ function BlogPost() {
         if (cells.every(c => c.match(/^[-]+$/))) return null; // separator row
         return (
           <div key={i} style={{ display: 'grid', gridTemplateColumns: `repeat(${cells.length}, 1fr)`, gap: '8px', padding: '8px 0', borderBottom: `1px solid ${theme.border}`, fontSize: '14px' }}>
-            {cells.map((cell, j) => <div key={j} style={{ color: theme.textSecondary }} dangerouslySetInnerHTML={{ __html: cell.replace(/\*\*(.*?)\*\*/g, '<strong style="color: #f0f0f5">$1</strong>') }} />)}
+            {cells.map((cell, j) => <div key={j} style={{ color: theme.textSecondary }} dangerouslySetInnerHTML={{ __html: cell.replace(/\*\*(.*?)\*\*/g, '<strong style="color: #eef2f4">$1</strong>') }} />)}
           </div>
         );
       }
       if (trimmed.startsWith('- ') || trimmed.match(/^\d+\./)) {
-        return <li key={i} style={{ color: theme.textSecondary, lineHeight: 1.8, marginLeft: '20px' }} dangerouslySetInnerHTML={{ __html: trimmed.replace(/^[-\d.]+\s*/, '').replace(/\*\*(.*?)\*\*/g, '<strong style="color: #f0f0f5">$1</strong>').replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color: #7c6df0">$1</a>') }} />;
+        return <li key={i} style={{ color: theme.textSecondary, lineHeight: 1.8, marginLeft: '20px' }} dangerouslySetInnerHTML={{ __html: trimmed.replace(/^[-\d.]+\s*/, '').replace(/\*\*(.*?)\*\*/g, '<strong style="color: #eef2f4">$1</strong>').replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color: #0c8a7e">$1</a>') }} />;
       }
       // Regular paragraph
-      return <p key={i} style={{ color: theme.textSecondary, lineHeight: 1.8, margin: '8px 0' }} dangerouslySetInnerHTML={{ __html: trimmed.replace(/\*\*(.*?)\*\*/g, '<strong style="color: #f0f0f5">$1</strong>').replace(/\*([^*]+)\*/g, '<em>$1</em>').replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color: #7c6df0">$1</a>') }} />;
+      return <p key={i} style={{ color: theme.textSecondary, lineHeight: 1.8, margin: '8px 0' }} dangerouslySetInnerHTML={{ __html: trimmed.replace(/\*\*(.*?)\*\*/g, '<strong style="color: #eef2f4">$1</strong>').replace(/\*([^*]+)\*/g, '<em>$1</em>').replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color: #0c8a7e">$1</a>') }} />;
     });
   };
 
@@ -1698,11 +1698,11 @@ function BlogPost() {
       <Helmet>
         <title>{post.title} | IDDI</title>
         <meta name="description" content={post.meta_description} />
-        <link rel="canonical" href={`https://vending-front-end.vercel.app/blog/${slug}`} />
+        <link rel="canonical" href={`https://iddisolutions.net/blog/${slug}`} />
         <meta property="og:type" content="article" />
         <meta property="og:title" content={`${post.title} | IDDI`} />
         <meta property="og:description" content={post.meta_description} />
-        <meta property="og:url" content={`https://vending-front-end.vercel.app/blog/${slug}`} />
+        <meta property="og:url" content={`https://iddisolutions.net/blog/${slug}`} />
         <meta property="og:site_name" content="IDDI" />
         <meta name="twitter:card" content="summary" />
         <meta name="twitter:title" content={post.title} />
@@ -1710,7 +1710,7 @@ function BlogPost() {
       </Helmet>
 
       <nav style={{
-        background: 'rgba(13, 13, 26, 0.95)', backdropFilter: 'blur(12px)',
+        background: 'rgba(10, 14, 18, 0.95)', backdropFilter: 'blur(12px)',
         borderBottom: `1px solid ${theme.border}`, padding: '12px 24px',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>

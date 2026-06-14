@@ -4,14 +4,14 @@ import { Helmet } from 'react-helmet-async';
 import LeadCapture from '../components/LeadCapture';
 
 const theme = {
-  bg: '#0d0d1a',
-  surface: '#1a1a2e',
-  border: '#2a2a4a',
-  primary: '#7c6df0',
-  primaryHover: '#6b5ce0',
-  success: '#34d399',
-  text: '#f0f0f5',
-  textSecondary: '#9d9db5',
+  bg: '#0a0e12',
+  surface: '#121821',
+  border: '#27323f',
+  primary: '#0c8a7e',
+  primaryHover: '#0a7368',
+  success: '#22c55e',
+  text: '#eef2f4',
+  textSecondary: '#9fb0bb',
 };
 
 const benefits = [

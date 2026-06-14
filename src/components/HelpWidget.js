@@ -109,7 +109,7 @@ function HelpWidget() {
           fontSize: 22,
           fontWeight: '700',
           cursor: 'pointer',
-          boxShadow: '0 4px 16px rgba(124, 109, 240, 0.4)',
+          boxShadow: '0 4px 16px rgba(15, 148, 136, 0.4)',
           zIndex: 9999,
           display: 'flex',
           alignItems: 'center',

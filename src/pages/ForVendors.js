@@ -6,9 +6,9 @@ import LeadCapture from '../components/LeadCapture';
 import ExitIntentPopup from '../components/ExitIntentPopup';
 
 const theme = {
-  bg: '#0d0d1a', surface: '#1a1a2e', border: '#2a2a4a',
-  primary: '#7c6df0', success: '#34d399', text: '#f0f0f5',
-  textSecondary: '#9d9db5', textMuted: '#6b6b85',
+  bg: '#0a0e12', surface: '#121821', border: '#27323f',
+  primary: '#0c8a7e', success: '#22c55e', text: '#eef2f4',
+  textSecondary: '#9fb0bb', textMuted: '#677884',
 };
 
 const featureIcons = ['📊', '🗳️', '🚚', '📈', '🏆', '📱'];
@@ -23,11 +23,11 @@ function ForVendors() {
       <Helmet>
         <title>IDDI for Vending Operators - Free Management Platform</title>
         <meta name="description" content="IDDI gives vending machine operators free inventory tracking, customer polling, route optimization, and analytics. Join 500+ machines already managed on IDDI." />
-        <link rel="canonical" href="https://vending-front-end.vercel.app/for-vendors" />
+        <link rel="canonical" href="https://iddisolutions.net/for-vendors" />
         <meta property="og:type" content="website" />
         <meta property="og:title" content="IDDI for Vending Operators - Free Management Platform" />
         <meta property="og:description" content="Free inventory tracking, customer polling, route optimization, and analytics for vending machine operators." />
-        <meta property="og:url" content="https://vending-front-end.vercel.app/for-vendors" />
+        <meta property="og:url" content="https://iddisolutions.net/for-vendors" />
         <meta name="twitter:card" content="summary" />
         <meta name="twitter:title" content="IDDI for Vending Operators" />
         <meta name="twitter:description" content="Free vending machine management — inventory, QR polls, route planning, analytics." />
@@ -36,7 +36,7 @@ function ForVendors() {
       {/* Nav — matches HomePage pattern */}
       <nav style={{
         position: 'sticky', top: 0, zIndex: 100,
-        background: 'rgba(13, 13, 26, 0.95)', backdropFilter: 'blur(12px)',
+        background: 'rgba(10, 14, 18, 0.95)', backdropFilter: 'blur(12px)',
         borderBottom: `1px solid ${theme.border}`, padding: '12px 24px',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>

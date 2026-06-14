@@ -2,19 +2,19 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 
 const theme = {
-  bg: '#0d0d1a',
-  surface: '#1a1a2e',
-  surfaceHover: '#252540',
-  border: '#2a2a4a',
-  primary: '#7c6df0',
-  primaryHover: '#6b5ce0',
-  secondary: '#06b6d4',
-  success: '#34d399',
-  danger: '#f87171',
+  bg: '#0a0e12',
+  surface: '#121821',
+  surfaceHover: '#1b2430',
+  border: '#27323f',
+  primary: '#0c8a7e',
+  primaryHover: '#0a7368',
+  secondary: '#ff9f1c',
+  success: '#22c55e',
+  danger: '#ef4444',
   warning: '#fbbf24',
-  text: '#f0f0f5',
-  textSecondary: '#9d9db5',
-  textMuted: '#6b6b85',
+  text: '#eef2f4',
+  textSecondary: '#9fb0bb',
+  textMuted: '#677884',
 };
 
 const STEP_DURATION = 3800;
@@ -173,25 +173,25 @@ function StepGenerateQR({ progress }) {
       }}>
         {/* Simple QR pattern */}
         <svg width="90" height="90" viewBox="0 0 90 90">
-          <rect x="5" y="5" width="25" height="25" rx="3" fill="#1a1a2e" />
-          <rect x="60" y="5" width="25" height="25" rx="3" fill="#1a1a2e" />
-          <rect x="5" y="60" width="25" height="25" rx="3" fill="#1a1a2e" />
-          <rect x="10" y="10" width="15" height="15" rx="2" fill="#7c6df0" />
-          <rect x="65" y="10" width="15" height="15" rx="2" fill="#7c6df0" />
-          <rect x="10" y="65" width="15" height="15" rx="2" fill="#7c6df0" />
-          <rect x="35" y="5" width="5" height="5" fill="#1a1a2e" />
-          <rect x="35" y="15" width="5" height="5" fill="#1a1a2e" />
-          <rect x="45" y="5" width="5" height="5" fill="#1a1a2e" />
-          <rect x="35" y="35" width="20" height="20" rx="4" fill="#7c6df0" />
-          <rect x="5" y="40" width="5" height="5" fill="#1a1a2e" />
-          <rect x="15" y="40" width="5" height="5" fill="#1a1a2e" />
-          <rect x="60" y="40" width="5" height="5" fill="#1a1a2e" />
-          <rect x="70" y="40" width="5" height="5" fill="#1a1a2e" />
-          <rect x="80" y="40" width="5" height="5" fill="#1a1a2e" />
-          <rect x="60" y="60" width="5" height="5" fill="#1a1a2e" />
-          <rect x="70" y="70" width="5" height="5" fill="#1a1a2e" />
-          <rect x="80" y="60" width="5" height="5" fill="#1a1a2e" />
-          <rect x="80" y="80" width="5" height="5" fill="#1a1a2e" />
+          <rect x="5" y="5" width="25" height="25" rx="3" fill="#121821" />
+          <rect x="60" y="5" width="25" height="25" rx="3" fill="#121821" />
+          <rect x="5" y="60" width="25" height="25" rx="3" fill="#121821" />
+          <rect x="10" y="10" width="15" height="15" rx="2" fill="#0c8a7e" />
+          <rect x="65" y="10" width="15" height="15" rx="2" fill="#0c8a7e" />
+          <rect x="10" y="65" width="15" height="15" rx="2" fill="#0c8a7e" />
+          <rect x="35" y="5" width="5" height="5" fill="#121821" />
+          <rect x="35" y="15" width="5" height="5" fill="#121821" />
+          <rect x="45" y="5" width="5" height="5" fill="#121821" />
+          <rect x="35" y="35" width="20" height="20" rx="4" fill="#0c8a7e" />
+          <rect x="5" y="40" width="5" height="5" fill="#121821" />
+          <rect x="15" y="40" width="5" height="5" fill="#121821" />
+          <rect x="60" y="40" width="5" height="5" fill="#121821" />
+          <rect x="70" y="40" width="5" height="5" fill="#121821" />
+          <rect x="80" y="40" width="5" height="5" fill="#121821" />
+          <rect x="60" y="60" width="5" height="5" fill="#121821" />
+          <rect x="70" y="70" width="5" height="5" fill="#121821" />
+          <rect x="80" y="60" width="5" height="5" fill="#121821" />
+          <rect x="80" y="80" width="5" height="5" fill="#121821" />
         </svg>
       </div>
       <div style={{

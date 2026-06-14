@@ -7,19 +7,19 @@ import ExitIntentPopup from '../components/ExitIntentPopup';
 import InteractiveDemo from '../components/InteractiveDemo';
 
 const theme = {
-  bg: '#0d0d1a',
-  surface: '#1a1a2e',
-  surfaceHover: '#252540',
-  border: '#2a2a4a',
-  primary: '#7c6df0',
-  primaryHover: '#6b5ce0',
-  secondary: '#06b6d4',
-  success: '#34d399',
-  danger: '#f87171',
+  bg: '#0a0e12',
+  surface: '#121821',
+  surfaceHover: '#1b2430',
+  border: '#27323f',
+  primary: '#0c8a7e',
+  primaryHover: '#0a7368',
+  secondary: '#ff9f1c',
+  success: '#22c55e',
+  danger: '#ef4444',
   warning: '#fbbf24',
-  text: '#f0f0f5',
-  textSecondary: '#9d9db5',
-  textMuted: '#6b6b85',
+  text: '#eef2f4',
+  textSecondary: '#9fb0bb',
+  textMuted: '#677884',
 };
 
 const features = [
@@ -63,10 +63,10 @@ const steps = [
 ];
 
 const integrations = [
-  { name: 'Cantaloupe', what: 'Payment Processing', how: 'IDDI adds inventory intelligence and customer polling to your Cantaloupe-equipped machines.' },
-  { name: 'Nayax', what: 'Cashless Payments', how: 'Pair Nayax payment hardware with IDDI\'s product optimization to stock what actually sells.' },
-  { name: 'Vendera', what: 'Route Management', how: 'Use IDDI\'s spoilage tracking and Top 50 rankings alongside your Vendera routes.' },
-  { name: 'Any VMS', what: 'Your Current Setup', how: 'IDDI works alongside any vending management system — we handle the inventory and product side.' },
+  { name: 'Cantaloupe', what: 'Payment Processing', how: 'Keep Cantaloupe for payments. Run IDDI alongside it for inventory intelligence and customer polling.' },
+  { name: 'Nayax', what: 'Cashless Payments', how: 'Keep Nayax for cashless payments. Use IDDI separately to optimize what you stock.' },
+  { name: 'Vendera', what: 'Route Management', how: 'Plan routes in Vendera. Track spoilage and Top 50 product rankings in IDDI.' },
+  { name: 'HahaVending', what: 'Management Software', how: 'Run HahaVending as your VMS. IDDI adds the customer-demand and product layer on top.' },
 ];
 
 const demoProducts = [
@@ -385,11 +385,11 @@ function HomePage() {
         <title>IDDI - Free Vending Machine Management Software</title>
         <meta name="description" content="Free vending machine inventory management and spoilage optimization. Track stock, run customer polls, optimize routes — works alongside Cantaloupe, Nayax, and any VMS. Used by 500+ machines." />
         <meta name="keywords" content="free vending machine software, vending management platform, vending inventory tracking, vending route optimization, vending machine analytics" />
-        <link rel="canonical" href="https://vending-front-end.vercel.app/" />
+        <link rel="canonical" href="https://iddisolutions.net/" />
         <meta property="og:type" content="website" />
         <meta property="og:title" content="IDDI - Free Vending Machine Management Software" />
         <meta property="og:description" content="Track inventory, run customer polls, optimize routes — free forever. Works alongside Cantaloupe, Nayax, and any VMS." />
-        <meta property="og:url" content="https://vending-front-end.vercel.app/" />
+        <meta property="og:url" content="https://iddisolutions.net/" />
         <meta property="og:site_name" content="IDDI" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="IDDI - Free Vending Machine Management Software" />
@@ -402,14 +402,14 @@ function HomePage() {
           "operatingSystem": "Web",
           "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
           "description": "Free vending machine management software. Track inventory, run customer polls via QR codes, optimize routes, and analyze product performance.",
-          "url": "https://vending-front-end.vercel.app"
+          "url": "https://iddisolutions.net"
         })}</script>
       </Helmet>
 
       {/* Nav */}
       <nav style={{
         position: 'sticky', top: 0, zIndex: 100,
-        background: 'rgba(13, 13, 26, 0.95)', backdropFilter: 'blur(12px)',
+        background: 'rgba(10, 14, 18, 0.95)', backdropFilter: 'blur(12px)',
         borderBottom: `1px solid ${theme.border}`,
         padding: isMobile ? '12px 16px' : '12px 24px',
       }}>
@@ -760,7 +760,7 @@ function HomePage() {
         </h2>
         <div style={{
           display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))',
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)',
           gap: '32px',
         }}>
           {steps.map((s, i) => (
@@ -790,8 +790,9 @@ function HomePage() {
           Works With Your Existing Setup
         </h2>
         <p style={{ textAlign: 'center', color: theme.textSecondary, marginBottom: '36px', maxWidth: '600px', margin: '0 auto 36px' }}>
-          IDDI isn't a replacement for your payment or telemetry system — it's the inventory
-          and product intelligence layer that sits alongside them.
+          IDDI is a separate, standalone platform — you add your machines and products manually.
+          It doesn't plug into your payment or telemetry hardware directly, so it complements
+          whatever system you already run.
         </p>
 
         <div style={{
@@ -827,9 +828,10 @@ function HomePage() {
           border: `1px solid ${theme.primary}20`,
         }}>
           <p style={{ margin: 0, color: theme.textSecondary, fontSize: '15px' }}>
-            Already using Cantaloupe, Nayax, or another VMS?{' '}
-            <strong style={{ color: theme.text }}>IDDI adds what they don't cover</strong> — customer polling,
-            spoilage optimization, and product-level intelligence. Free.
+            Already using Cantaloupe, Nayax, Vendera, HahaVending, or any other system?{' '}
+            <strong style={{ color: theme.text }}>IDDI runs independently alongside it</strong> — you enter your
+            products manually, and IDDI adds what they don't: customer polling, spoilage optimization,
+            and product-level intelligence. Free.
           </p>
         </div>
       </section>

@@ -26,7 +26,7 @@ function VendorLogin() {
     maxWidth: '400px',
     margin: isMobile ? '0 auto' : '0 auto',
     padding: isMobile ? '24px 20px' : '32px',
-    boxShadow: '0 8px 32px rgba(124, 109, 240, 0.08), 0 2px 8px rgba(0, 0, 0, 0.3)',
+    boxShadow: '0 8px 32px rgba(15, 148, 136, 0.08), 0 2px 8px rgba(0, 0, 0, 0.3)',
     borderRadius: '12px',
   };
 

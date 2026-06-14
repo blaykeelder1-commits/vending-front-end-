@@ -2,7 +2,7 @@ import React from 'react';
 import PropTypes from 'prop-types';
 
 const theme = {
-  primary: '#8b5cf6',
+  primary: '#0c8a7e',
   bg: '#0f0f0f',
   surface: '#1a1a1a',
   text: '#ffffff',

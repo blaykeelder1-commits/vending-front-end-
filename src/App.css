@@ -15,7 +15,7 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Roboto', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #0d0d1a;
+  background-color: #0a0e12;
   color: #ffffff;
   line-height: 1.5;
 }
@@ -27,21 +27,21 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #1a1a2e;
+  background: #121821;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #3a3a5a;
+  background: #2a3540;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #4a4a6a;
+  background: #34404d;
 }
 
 /* Focus States */
 *:focus {
-  outline: 2px solid #7c6df0;
+  outline: 2px solid #0c8a7e;
   outline-offset: 2px;
 }
 
@@ -51,7 +51,7 @@ body {
 
 /* Selection */
 ::selection {
-  background-color: #7c6df0;
+  background-color: #0c8a7e;
   color: #ffffff;
 }
 
@@ -301,8 +301,8 @@ h3 {
 .card {
   padding: var(--spacing-md);
   border-radius: 8px;
-  background: #1a1a2e;
-  border: 1px solid #2a2a4a;
+  background: #121821;
+  border: 1px solid #27323f;
 }
 
 /* ============================================
@@ -334,9 +334,9 @@ h3 {
   display: flex;
   flex-direction: column;
   padding: var(--spacing-md);
-  background: #1a1a2e;
+  background: #121821;
   border-radius: 8px;
-  border: 1px solid #2a2a4a;
+  border: 1px solid #27323f;
 }
 
 .table-as-cards td {
@@ -349,7 +349,7 @@ h3 {
 .table-as-cards td::before {
   content: attr(data-label);
   font-weight: 600;
-  color: #9d9db5;
+  color: #9fb0bb;
   margin-right: var(--spacing-md);
 }
 
@@ -444,7 +444,7 @@ h3 {
   .table-as-cards td {
     display: table-cell;
     padding: var(--spacing-md);
-    border-bottom: 1px solid #2a2a4a;
+    border-bottom: 1px solid #27323f;
   }
 
   .table-as-cards td::before {

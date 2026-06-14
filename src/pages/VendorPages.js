@@ -901,7 +901,7 @@ function MachineForm({ onSuccess }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} style={{ ...styles.card, marginBottom: '20px', borderRadius: '14px', border: `1px solid ${theme.primary}30`, boxShadow: '0 2px 12px rgba(124,109,240,0.08)' }}>
+    <form onSubmit={handleSubmit} style={{ ...styles.card, marginBottom: '20px', borderRadius: '14px', border: `1px solid ${theme.primary}30`, boxShadow: '0 2px 12px rgba(15,148,136,0.08)' }}>
       <h3 style={{ margin: '0 0 16px 0', fontSize: '16px' }}>Add New Machine</h3>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <div>
@@ -963,7 +963,7 @@ function ProductForm({ onSuccess }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} style={{ ...styles.card, marginBottom: '20px', borderRadius: '14px', border: `1px solid ${theme.primary}30`, boxShadow: '0 2px 12px rgba(124,109,240,0.08)' }}>
+    <form onSubmit={handleSubmit} style={{ ...styles.card, marginBottom: '20px', borderRadius: '14px', border: `1px solid ${theme.primary}30`, boxShadow: '0 2px 12px rgba(15,148,136,0.08)' }}>
       <h3 style={{ margin: '0 0 16px 0', fontSize: '16px' }}>Add New Product</h3>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <div>
@@ -2414,7 +2414,7 @@ function MachineDetails() {
                   <div style={{ width: '40px', height: '40px', borderRadius: '6px', background: theme.border, flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', color: theme.textMuted }}>
                     {item.image_url ? (
                       <img src={item.image_url} alt={item.product_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
-                    ) : <span style={{ fontSize: '14px', color: '#4a4a6a' }}>--</span>}
+                    ) : <span style={{ fontSize: '14px', color: '#34404d' }}>--</span>}
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <h4 style={{ margin: '0 0 4px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.product_name}</h4>
@@ -4018,7 +4018,7 @@ function TopProducts() {
               <div style={{ width: isMobile ? '40px' : '50px', height: isMobile ? '40px' : '50px', borderRadius: '8px', background: theme.border, flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', color: theme.textMuted }}>
                 {product.image_url ? (
                   <img src={product.image_url} alt={product.product_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
-                ) : <span style={{ fontSize: '14px', color: '#4a4a6a' }}>--</span>}
+                ) : <span style={{ fontSize: '14px', color: '#34404d' }}>--</span>}
               </div>
 
               <div style={{ flex: 1, minWidth: 0 }}>

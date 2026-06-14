@@ -5,19 +5,19 @@ import { useIsMobile } from '../shared/theme';
 import { vendorAPI } from '../services/api';
 
 const theme = {
-  bg: '#0d0d1a',
-  surface: '#1a1a2e',
-  surfaceHover: '#252540',
-  border: '#2a2a4a',
-  primary: '#7c6df0',
-  primaryHover: '#6b5ce0',
-  secondary: '#06b6d4',
-  success: '#34d399',
-  danger: '#f87171',
+  bg: '#0a0e12',
+  surface: '#121821',
+  surfaceHover: '#1b2430',
+  border: '#27323f',
+  primary: '#0c8a7e',
+  primaryHover: '#0a7368',
+  secondary: '#ff9f1c',
+  success: '#22c55e',
+  danger: '#ef4444',
   warning: '#fbbf24',
-  text: '#f0f0f5',
-  textSecondary: '#9d9db5',
-  textMuted: '#6b6b85',
+  text: '#eef2f4',
+  textSecondary: '#9fb0bb',
+  textMuted: '#677884',
 };
 
 const tiers = [
@@ -47,8 +47,8 @@ const tiers = [
     machines: 'Up to 10 machines',
     highlight: true,
     badge: 'Most Popular',
-    buttonText: 'Start 14-Day Free Trial',
-    trial: '14-day free trial, cancel anytime',
+    buttonText: 'Start 7-Day Free Trial',
+    trial: '7-day free trial, cancel anytime',
     description: 'Everything you need to run a growing vending operation.',
     features: [
       'Everything in Free',
@@ -66,8 +66,8 @@ const tiers = [
     machines: 'Up to 30 machines',
     highlight: false,
     badge: null,
-    buttonText: 'Start 14-Day Free Trial',
-    trial: '14-day free trial, cancel anytime',
+    buttonText: 'Start 7-Day Free Trial',
+    trial: '7-day free trial, cancel anytime',
     description: 'Advanced insights for operators scaling past 10 machines.',
     features: [
       'Everything in Growth',
@@ -84,8 +84,8 @@ const tiers = [
     machines: 'Up to 100 machines',
     highlight: false,
     badge: null,
-    buttonText: 'Start 14-Day Free Trial',
-    trial: '14-day free trial, cancel anytime',
+    buttonText: 'Start 7-Day Free Trial',
+    trial: '7-day free trial, cancel anytime',
     description: 'For established operations with large machine fleets.',
     features: [
       'Everything in Pro',
@@ -124,7 +124,7 @@ const faqs = [
     answer: 'Yes. Upgrade or downgrade at any time. Changes take effect immediately and billing is prorated. No contracts, no cancellation fees.',
   },
   {
-    question: 'What happens after my 14-day trial?',
+    question: 'What happens after my 7-day trial?',
     answer: "We'll remind you before it ends. No surprise charges. If you don't choose to continue, your account simply moves to the Free plan with 1 machine.",
   },
   {
@@ -241,13 +241,13 @@ function PricingPage() {
       <Helmet>
         <title>Pricing - IDDI Vending Machine Management</title>
         <meta name="description" content="Simple, transparent pricing for IDDI vending machine management. Start free with 1 machine, all features included. Growth plans from $19/mo. No per-machine fees." />
-        <link rel="canonical" href="https://vending-front-end.vercel.app/pricing" />
+        <link rel="canonical" href="https://iddisolutions.net/pricing" />
       </Helmet>
 
       {/* Nav */}
       <nav style={{
         position: 'sticky', top: 0, zIndex: 100,
-        background: 'rgba(13, 13, 26, 0.95)', backdropFilter: 'blur(12px)',
+        background: 'rgba(10, 14, 18, 0.95)', backdropFilter: 'blur(12px)',
         borderBottom: `1px solid ${theme.border}`,
         padding: isMobile ? '12px 16px' : '12px 24px',
       }}>
@@ -385,7 +385,7 @@ function PricingPage() {
           display: 'grid',
           gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)',
           gap: '20px',
-          alignItems: 'start',
+          alignItems: 'stretch',
         }}>
           {tiers.map((tier) => {
             const isPro = tier.highlight;
@@ -397,6 +397,8 @@ function PricingPage() {
                 padding: isMobile ? '28px 24px' : '32px 28px',
                 position: 'relative',
                 boxShadow: isPro ? `0 0 40px ${theme.primary}20, 0 0 80px ${theme.primary}10` : 'none',
+                display: 'flex',
+                flexDirection: 'column',
               }}>
                 {tier.badge && (
                   <div style={{
@@ -481,6 +483,7 @@ function PricingPage() {
                   disabled={checkoutLoading === tier.name.toLowerCase()}
                   style={{
                     display: 'block', width: '100%', textAlign: 'center',
+                    marginTop: 'auto',
                     padding: '14px 20px', borderRadius: '8px', fontWeight: '600', fontSize: '15px',
                     backgroundColor: isPro ? theme.primary : 'transparent',
                     color: isPro ? '#fff' : theme.primary,

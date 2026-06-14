@@ -3,9 +3,9 @@ import { Link, useParams } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 
 const theme = {
-  bg: '#0d0d1a', surface: '#1a1a2e', border: '#2a2a4a',
-  primary: '#7c6df0', success: '#34d399', danger: '#f87171',
-  text: '#f0f0f5', textSecondary: '#9d9db5', textMuted: '#6b6b85',
+  bg: '#0a0e12', surface: '#121821', border: '#27323f',
+  primary: '#0c8a7e', success: '#22c55e', danger: '#ef4444',
+  text: '#eef2f4', textSecondary: '#9fb0bb', textMuted: '#677884',
 };
 
 const comparisons = {
@@ -196,18 +196,18 @@ function ComparisonPage() {
       <Helmet>
         <title>{data.title} | IDDI</title>
         <meta name="description" content={data.meta} />
-        <link rel="canonical" href={`https://vending-front-end.vercel.app/vs/${competitor}`} />
+        <link rel="canonical" href={`https://iddisolutions.net/vs/${competitor}`} />
         <meta property="og:type" content="article" />
         <meta property="og:title" content={`${data.title} | IDDI`} />
         <meta property="og:description" content={data.meta} />
-        <meta property="og:url" content={`https://vending-front-end.vercel.app/vs/${competitor}`} />
+        <meta property="og:url" content={`https://iddisolutions.net/vs/${competitor}`} />
         <meta name="twitter:card" content="summary" />
         <meta name="twitter:title" content={data.title} />
         <meta name="twitter:description" content={data.meta} />
       </Helmet>
 
       <nav style={{
-        background: 'rgba(13, 13, 26, 0.95)', backdropFilter: 'blur(12px)',
+        background: 'rgba(10, 14, 18, 0.95)', backdropFilter: 'blur(12px)',
         borderBottom: `1px solid ${theme.border}`, padding: '12px 24px',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>

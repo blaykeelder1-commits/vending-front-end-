@@ -55,7 +55,7 @@ function VendorLayout({ children }) {
         left: 0,
         right: 0,
         height: '56px',
-        background: `linear-gradient(135deg, ${theme.surface} 0%, #1e1e38 100%)`,
+        background: `linear-gradient(135deg, ${theme.surface} 0%, #1b2430 100%)`,
         borderBottom: `1px solid ${theme.border}`,
         display: 'flex',
         alignItems: 'center',
@@ -65,7 +65,7 @@ function VendorLayout({ children }) {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{
-            background: `linear-gradient(135deg, ${theme.primary}, #9b8df8)`,
+            background: `linear-gradient(135deg, ${theme.primary}, #2dd4bf)`,
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
             fontWeight: '800',
@@ -121,7 +121,7 @@ function VendorLayout({ children }) {
         bottom: 0,
         left: 0,
         right: 0,
-        background: `linear-gradient(180deg, ${theme.surface} 0%, #161628 100%)`,
+        background: `linear-gradient(180deg, ${theme.surface} 0%, #0f141b 100%)`,
         borderTop: `1px solid ${theme.border}`,
         display: 'flex',
         justifyContent: 'space-around',
@@ -141,7 +141,7 @@ function VendorLayout({ children }) {
               style={{
                 background: 'none',
                 border: 'none',
-                color: isActive ? '#f0f0f5' : '#6b6b85',
+                color: isActive ? '#eef2f4' : '#677884',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',

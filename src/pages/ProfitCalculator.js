@@ -5,15 +5,15 @@ import { publicAPI } from '../services/api';
 import { useIsMobile } from '../shared/theme';
 
 const theme = {
-  bg: '#0d0d1a',
-  surface: '#1a1a2e',
-  surfaceHover: '#252540',
-  border: '#2a2a4a',
-  primary: '#7c6df0',
-  success: '#34d399',
-  text: '#f0f0f5',
-  textSecondary: '#9d9db5',
-  textMuted: '#6b6b85',
+  bg: '#0a0e12',
+  surface: '#121821',
+  surfaceHover: '#1b2430',
+  border: '#27323f',
+  primary: '#0c8a7e',
+  success: '#22c55e',
+  text: '#eef2f4',
+  textSecondary: '#9fb0bb',
+  textMuted: '#677884',
 };
 
 const defaults = {
@@ -97,13 +97,13 @@ function ProfitCalculator() {
       <Helmet>
         <title>Vending Machine Profit Calculator (2026) | IDDI</title>
         <meta name="description" content="Calculate your vending machine profits instantly. Simple inputs, clear results. See how much more you could earn with smarter inventory management. Free calculator by IDDI." />
-        <link rel="canonical" href="https://vending-front-end.vercel.app/vending-machine-profit-calculator" />
+        <link rel="canonical" href="https://iddisolutions.net/vending-machine-profit-calculator" />
       </Helmet>
 
       {/* Nav */}
       <nav style={{
         position: 'sticky', top: 0, zIndex: 100,
-        background: 'rgba(13, 13, 26, 0.95)', backdropFilter: 'blur(12px)',
+        background: 'rgba(10, 14, 18, 0.95)', backdropFilter: 'blur(12px)',
         borderBottom: `1px solid ${theme.border}`, padding: '12px 24px',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>
@@ -197,11 +197,11 @@ function ProfitCalculator() {
 
             <div style={{
               padding: '20px', borderRadius: '10px', textAlign: 'center', marginBottom: '16px',
-              backgroundColor: monthlyProfit > 0 ? theme.success + '10' : '#f8717110',
-              border: `1px solid ${monthlyProfit > 0 ? theme.success + '40' : '#f8717140'}`,
+              backgroundColor: monthlyProfit > 0 ? theme.success + '10' : '#ef444410',
+              border: `1px solid ${monthlyProfit > 0 ? theme.success + '40' : '#ef444440'}`,
             }}>
               <div style={{ color: theme.textMuted, fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', marginBottom: '6px' }}>Monthly Profit</div>
-              <div style={{ fontSize: isMobile ? '32px' : '36px', fontWeight: '800', color: monthlyProfit > 0 ? theme.success : '#f87171' }}>
+              <div style={{ fontSize: isMobile ? '32px' : '36px', fontWeight: '800', color: monthlyProfit > 0 ? theme.success : '#ef4444' }}>
                 {fmt(monthlyProfit)}
               </div>
             </div>

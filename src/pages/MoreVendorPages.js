@@ -293,7 +293,7 @@ function InventoryManagement() {
     const colors = {
       purchase: { bg: `${theme.success}20`, color: theme.success, label: 'Purchase' },
       dispersal_to_machine: { bg: `${theme.primary}20`, color: theme.primary, label: 'To Machine' },
-      direct_to_machine: { bg: '#06b6d420', color: theme.secondary, label: 'Direct' },
+      direct_to_machine: { bg: '#ff9f1c20', color: theme.secondary, label: 'Direct' },
       sold_from_machine: { bg: `${theme.danger}20`, color: theme.danger, label: 'Sold' },
       adjustment: { bg: `${theme.warning}20`, color: theme.warning, label: 'Adjustment' },
     };
@@ -403,7 +403,7 @@ function InventoryManagement() {
                     <div style={{ width: '36px', height: '36px', borderRadius: '6px', background: theme.border, flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', color: theme.textMuted }}>
                       {item.image_url ? (
                         <img src={item.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
-                      ) : <span style={{ fontSize: '14px', color: '#4a4a6a' }}>--</span>}
+                      ) : <span style={{ fontSize: '14px', color: '#34404d' }}>--</span>}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: '600', wordBreak: 'break-word' }}>{item.product_name}</div>

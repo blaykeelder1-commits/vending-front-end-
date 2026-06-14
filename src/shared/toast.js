@@ -57,9 +57,9 @@ const ToastContainer = React.memo(function ToastContainer({ toasts }) {
 
 const Toast = React.memo(function Toast({ message, type }) {
   const colors = {
-    success: { bg: '#34d39920', border: '#34d399', text: '#34d399' },
-    error: { bg: '#f8717120', border: '#f87171', text: '#f87171' },
-    info: { bg: '#7c6df020', border: '#7c6df0', text: '#7c6df0' },
+    success: { bg: '#22c55e20', border: '#22c55e', text: '#22c55e' },
+    error: { bg: '#ef444420', border: '#ef4444', text: '#ef4444' },
+    info: { bg: '#0c8a7e20', border: '#0c8a7e', text: '#0c8a7e' },
     warning: { bg: '#fbbf2420', border: '#fbbf24', text: '#fbbf24' },
   };
   const color = colors[type] || colors.info;
@@ -67,7 +67,7 @@ const Toast = React.memo(function Toast({ message, type }) {
   return (
     <div style={{
       padding: '12px 20px',
-      backgroundColor: '#1a1a2e',
+      backgroundColor: '#121821',
       border: `1px solid ${color.border}`,
       borderLeft: `4px solid ${color.border}`,
       borderRadius: '6px',
